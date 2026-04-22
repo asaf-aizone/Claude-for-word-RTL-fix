@@ -1,0 +1,8 @@
+node_modules/
+*.log
+doctor.log
+install.log
+test-results/
+
+Thumbs.db
+.DS_Store

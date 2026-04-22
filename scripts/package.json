@@ -1,0 +1,38 @@
+{
+  "name": "claude-word-rtl",
+  "version": "0.1.0",
+  "description": "Client-side RTL fix for Claude's Microsoft Word add-in.",
+  "main": "inject.js",
+  "bin": {
+    "claude-word-rtl": "inject.js"
+  },
+  "scripts": {
+    "start": "node inject.js"
+  },
+  "dependencies": {
+    "chrome-remote-interface": "^0.33.0"
+  },
+  "engines": {
+    "node": ">=16"
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Asaf Abramzon",
+    "url": "https://www.linkedin.com/in/asaf-abramzon-7a2b61180/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/asaf-aizone/Claude-for-word-RTL-fix"
+  },
+  "keywords": [
+    "claude",
+    "anthropic",
+    "word",
+    "office",
+    "rtl",
+    "hebrew",
+    "accessibility",
+    "webview2",
+    "cdp"
+  ]
+}
