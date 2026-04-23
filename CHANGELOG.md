@@ -5,6 +5,19 @@ All notable changes to this project will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.2] - 2026-04-23
+
+### Added
+
+- `CLAUDE.md` at the repo root. Claude Code sessions launched inside
+  the install folder read it automatically and get pointers to the
+  release notes, the "red tray" known issue for v0.1.0, the tray/
+  injector file layout under `%TEMP%`, and rules about what NOT to
+  recommend. Purpose: when a user asks Claude Code on their machine
+  for help with this tool, the agent knows to fetch the latest
+  release notes before advising, instead of reasoning from stale
+  training data.
+
 ## [0.1.1] - 2026-04-23
 
 ### Fixed
