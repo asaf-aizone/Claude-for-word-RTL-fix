@@ -11,6 +11,15 @@
 <strong>אינו תוסף רשמי של Anthropic או של Microsoft.</strong> כלי open-source עצמאי.
 </p>
 
+<blockquote>
+<p>
+<strong>Windows בלבד.</strong> הכלי לא עובד על macOS או Linux. תוסף Claude ל-Word
+מבוסס על WebView2 של מיקרוסופט, שקיים רק ב-Windows. ל-Word ל-Mac יש runtime
+אחר (WKWebView) שלא חושף את אותו debugging interface, וכל שכבת ההפעלה (bat, vbs,
+PowerShell, Registry, Startup folder) לא רלוונטית שם. אם אתם על Mac, אין port מ-Word.
+</p>
+</blockquote>
+
 <p>
   <a href="#install"><img src="https://img.shields.io/badge/platform-Windows%2010%2F11-blue" alt="Platform"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="License"></a>
@@ -416,13 +425,32 @@ COM, וה-wrapper פותח את כולם מחדש. אם משהו לא נשמר, 
 <p><strong>אין לי Git. אפשר בלי clone?</strong><br>
 כן. להוריד זיפ מ-Releases, לחלץ, להריץ <code>install.bat</code>.</p>
 
-<p><strong><code>check-update.bat</code> לא עובד.</strong><br>
-ידוע. עד ה-release הציבורי הראשון אין tag ב-repo וה-script יחזיר
-<code>[ERROR]</code>. זה צפוי.</p>
+<p><strong>איך בודקים אם יש גרסה חדשה?</strong><br>
+הריצו <code>check-update.bat</code> או השתמשו בתפריט של הטריי: "Check for updates...".
+הסקריפט משווה את הגרסה המקומית לגרסה האחרונה ב-GitHub דרך ה-API של release. ללא תלויות npm חיצוניות.</p>
 
 <hr>
 
 <h2>פתרון בעיות</h2>
+
+<h3>אבחון מהיר - השתמשו ב-Claude Code, לא ב-Claude Chat</h3>
+
+<p>
+לפני שממשיכים לטבלת התסמינים למטה, שימו לב: לאבחון של הכלי הזה
+<strong>השתמשו ב-Claude Code</strong> (<a href="https://claude.com/claude-code">claude.com/claude-code</a>),
+לא ב-Claude Chat או בפאנל של Claude ב-Word. הסיבה: Claude Code רץ
+מקומית על המחשב שלכם, קורא ישירות את <code>%TEMP%\claude-word-rtl.log</code>,
+<code>doctor.log</code>, ואת <code>CLAUDE.md</code> של הפרויקט, ויכול להריץ
+<code>netstat</code>, <code>curl</code>, ו-<code>tasklist</code> כחלק מהאבחון.
+</p>
+
+<p>
+זרימת אבחון מומלצת: להתקין את Claude Code, לפתוח session בתיקיית
+ההתקנה (<code>cd</code> לשם ואז <code>claude</code>), ולתאר את הבעיה
+בעברית. Claude Code יקרא את הלוגים, יזהה את הגורם, ויציע תיקון.
+Chat או הפאנל של Claude ב-Word לא רואים את הקבצים האלה, אז הם
+ינחשו ויאכילו אתכם בצעדים כלליים שלא יעזרו במצב הספציפי.
+</p>
 
 <p>
 לפני הכל - לפתוח את <strong>Show diagnostic log</strong> מהתפריט. הלוג ב-
@@ -464,6 +492,10 @@ COM, וה-wrapper פותח את כולם מחדש. אם משהו לא נשמר, 
       <td>Auto-enable לא לוקח אפקט באפליקציה אחרת (Teams/Outlook)</td>
       <td>צפוי. משתני סביבה נטענים בפתיחת תהליך. צריך לסגור ולפתוח מחדש את האפליקציה. שינוי משודר דרך <code>WM_SETTINGCHANGE</code> אבל לא משפיע על תהליכים שכבר רצים</td>
     </tr>
+    <tr>
+      <td>הטריי נשאר אדום למרות ש-Auto-enable דלוק, Word פתוח, ו-Node מותקן</td>
+      <td>פורט 9222 אולי תפוס בידי אפליקציה אחרת. בודקים ב-cmd: <code>netstat -ano | findstr :9222</code>. אם רואים שורה עם PID שאינו של <code>WINWORD.EXE</code>, אפליקציה אחרת יושבת על הפורט. אשמים מוכרים: Google Drive File Stream, אפליקציות מבוססות Electron שמריצות עם <code>--remote-debugging-port=9222</code>, או WebView2 SDK tools. סוגרים את האפליקציה שתופסת את הפורט (לפי ה-PID וה-process name ב-Task Manager) ואז פותחים את Word מחדש דרך הטריי (Connect). מגרסה 0.1.3 ואילך ה-injector מטפל במקרה שבו גם Drive וגם Word יושבים על 9222 בו-זמנית בגלל IPv4/IPv6 split, אבל אם אף אחד לא מציע panel של Claude, אין מה לתפוס. <code>doctor.bat</code> של גרסה 0.1.3 מציג את זה בבירור בשתי הבדיקות החדשות.</td>
+    </tr>
   </tbody>
 </table>
 
@@ -475,7 +507,7 @@ COM, וה-wrapper פותח את כולם מחדש. אם משהו לא נשמר, 
   <li>debug port ב-<code>localhost:9222</code> לא מאומת - כל תהליך מקומי באותו user יכול להתחבר. ראו "הערת אבטחה".</li>
   <li>Microsoft 365 תאגידי עם EDR/DLP יכול לחסום את דגל ה-WebView2. הכלי לא מיועד ללפטופים ארגוניים סגורים.</li>
   <li>עדכון של תוסף Claude שמחליף את ה-DOM יכול לשבור את ההזרקה עד patch. יישלח release מתוקן.</li>
-  <li>Word Online ו-Mac לא נתמכים.</li>
+  <li><strong>Mac (macOS) לא נתמך ולא יהיה נתמך.</strong> Word ל-Mac משתמש ב-WKWebView במקום WebView2, ושכבת ה-launcher כולה (bat, vbs, ps1) היא Windows-only. Word Online גם לא נתמך.</li>
   <li>גרסאות של תוסף Claude שלא משתמשות ב-WebView2 (למשל Electron עצמאי) - לא נתמכות.</li>
 </ul>
 
@@ -539,6 +571,16 @@ RTL fix for the Claude panel in Microsoft Word. Local-only, no telemetry, Apache
 <strong>Not an official Anthropic or Microsoft add-in.</strong> Independent open-source tool.
 </p>
 
+<blockquote>
+<p>
+<strong>Windows only.</strong> This tool does not work on macOS or Linux. The Claude
+Word add-in is built on Microsoft's WebView2 runtime, which is Windows-only. Word
+for Mac uses WKWebView, which does not expose the same debugging interface, and the
+entire launcher stack (batch, VBS, PowerShell, registry, Startup folder) is
+Windows-specific. If you are on Mac, this tool has no port.
+</p>
+</blockquote>
+
 <h2>What it does</h2>
 
 <p>
@@ -598,8 +640,7 @@ knowing. Uncheck the menu item at any time to remove it.
 If that's not acceptable, leave Auto-enable off and use manual Connect.
 On uninstall, the variable is cleared only if its value still matches
 exactly what we wrote - any user-modified value is preserved.
-  </tbody>
-</table>
+</p>
 
 <h2 id="install-en">Install</h2>
 
@@ -773,11 +814,34 @@ Yes, gracefully. Word is asked to save changes, the document list is captured
 via COM, and the wrapper reopens all of them. If something wasn't saved,
 Word will prompt as usual.</p>
 
-<p><strong><code>check-update.bat</code> doesn't work.</strong><br>
-Known. Until the first public release is tagged, the script will report
-<code>[ERROR]</code>. That's expected.</p>
+<p><strong>How do I check for a newer version?</strong><br>
+Run <code>check-update.bat</code> or use the tray menu's "Check for updates..." item.
+The script compares the local version to the latest GitHub release via the API. No npm dependencies.</p>
 
 <h2>Troubleshooting</h2>
+
+<h3>Quick diagnosis - use Claude Code, not Claude Chat</h3>
+
+<p>
+Before walking the symptom table below, note: for troubleshooting this
+tool, <strong>use Claude Code</strong>
+(<a href="https://claude.com/claude-code">claude.com/claude-code</a>), not
+Claude Chat or Claude's in-Word panel. Reason: Claude Code runs
+locally on your machine, reads
+<code>%TEMP%\claude-word-rtl.log</code>, <code>doctor.log</code>, and
+the project's <code>CLAUDE.md</code> directly, and can execute
+<code>netstat</code>, <code>curl</code>, and <code>tasklist</code>
+as part of its diagnosis.
+</p>
+
+<p>
+Recommended flow: install Claude Code, open a session in the install
+folder (<code>cd</code> into it, then <code>claude</code>), and describe
+the problem. Claude Code reads the logs, identifies the cause, and
+proposes a fix. Chat and the in-Word panel cannot see those files, so
+they will guess from general knowledge and feed you generic steps that
+often do not match the specific failure mode.
+</p>
 
 <p>
 Always start with <strong>Show diagnostic log</strong> from the tray menu.
@@ -819,6 +883,10 @@ errors. 90% of issues are obvious from there.
       <td>Auto-enable doesn't take effect in Teams/Outlook</td>
       <td>Expected. Env vars load at process start. Close and reopen the app. <code>WM_SETTINGCHANGE</code> is broadcast but doesn't affect already-running processes</td>
     </tr>
+    <tr>
+      <td>Tray stays red even with Auto-enable on, Word open, and Node installed</td>
+      <td>Port 9222 may be owned by another app. In cmd: <code>netstat -ano | findstr :9222</code>. If you see a row with a PID that is not <code>WINWORD.EXE</code>, another app is squatting on the port. Known offenders: Google Drive File Stream, Electron-based apps launched with <code>--remote-debugging-port=9222</code>, WebView2 SDK tools. Close the squatting app (find its PID in Task Manager), then reopen Word via tray, Connect. As of v0.1.3 the injector handles the common case where Drive and Word each bind a different family (IPv4 vs IPv6) of <code>localhost:9222</code>; but if Word is not actually exposing the Claude panel on 9222, there is nothing to attach to. <code>doctor.bat</code> as of v0.1.3 surfaces this directly in its two new checks.</td>
+    </tr>
   </tbody>
 </table>
 
@@ -828,7 +896,7 @@ errors. 90% of issues are obvious from there.
   <li>The <code>localhost:9222</code> debug port is unauthenticated. See Security note.</li>
   <li>Corporate M365 with EDR/DLP may block the WebView2 flag. Not intended for sealed corporate laptops.</li>
   <li>A Claude add-in update that changes the panel DOM can break injection until a patch is released.</li>
-  <li>Word Online and Mac aren't supported.</li>
+  <li><strong>Mac (macOS) is not supported and will not be supported.</strong> Word for Mac uses WKWebView instead of WebView2, and the entire launcher stack (bat, vbs, ps1) is Windows-only. Word Online is also not supported.</li>
   <li>Custom builds of the Claude add-in (standalone Electron, alternate WebView) aren't supported.</li>
 </ul>
 

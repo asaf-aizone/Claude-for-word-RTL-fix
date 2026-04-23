@@ -5,6 +5,79 @@ All notable changes to this project will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.3] - 2026-04-23
+
+### Fixed
+
+- Tray stays red on a clean install with Auto-enable on, even when
+  Word is running and Node is running. Root cause: WebView2 opens
+  its CDP debug server on `[::1]:9222` (IPv6 loopback) while other
+  apps - notably Google Drive File Stream - bind to
+  `127.0.0.1:9222` (IPv4). Node's `http.get('http://localhost:...')`
+  resolves `localhost` to IPv4 first and hits whoever got there
+  first, so `listTargets()` was talking to Google Drive and seeing
+  no Claude panel. `scripts/inject.js` now probes both
+  `127.0.0.1:9222` and `[::1]:9222` explicitly and merges the
+  target lists, so the injector finds the Word panel regardless of
+  which family Windows resolves `localhost` to and regardless of
+  what else is listening on the other family.
+- `scripts/inject.js` now distinguishes "no targets on either
+  family" (normal during Word startup) from "targets exist on
+  9222 but none of them are claude.ai" (another app owns the
+  port). In the second case it writes
+  `ERROR:port-9222-taken-by-other-app` to the status file so the
+  tray tooltip names the actual problem instead of showing a
+  generic disconnected state. Users chasing a stuck-red tray get
+  pointed at the port conflict immediately rather than reinstalling
+  in circles.
+
+### Added
+
+- `doctor.bat` now runs explicit IPv4 and IPv6 probes against port
+  9222 (`127.0.0.1:9222` and `[::1]:9222`) and a
+  `netstat -ano | findstr :9222` dump that surfaces which PID owns
+  which address family. When the injector cannot attach, the log
+  immediately shows whether the CDP port is split across families
+  or owned by a non-Word process, which is the fastest path from
+  "tray is red" to "Google Drive is squatting on IPv4 port 9222".
+- Troubleshooting row in both README.md (English section) and
+  README.he.md for "tray stays red despite Auto-enable on and
+  Node.js running". Points the user at `doctor.bat` and the
+  `netstat` check, and names Google Drive File Stream as a known
+  offender that grabs `127.0.0.1:9222` on some machines. Saves
+  users the diagnostic trip when the symptom matches.
+- Windows-only notices across the project docs, added during this
+  session between the 0.1.2 tag and 0.1.3: a Hebrew blockquote and
+  an English blockquote at the top of the README stating the tool
+  runs on Windows only, strengthened "Mac not supported" bullets
+  in the prerequisites list, a Windows-only callout in
+  README.he.md, a new "Platform - Windows only" section in
+  `CLAUDE.md` explaining the WebView2 vs WKWebView gap, and a
+  "What NOT to do" bullet telling Claude Code sessions not to
+  suggest Wine, a Windows VM, or a macOS/Linux port as a
+  workaround. Cuts off a recurring support thread where Mac users
+  asked whether a tweak or a VM could make it work.
+- Troubleshooting sections in README.md (Hebrew and English) and
+  README.he.md now lead with a "use Claude Code, not Claude Chat"
+  callout. Claude Code runs locally and reads
+  `%TEMP%\claude-word-rtl.log`, `doctor.log`, and project
+  `CLAUDE.md` directly, and can execute `netstat` and `curl` to
+  identify port-owner conflicts. Claude Chat cannot see those
+  files and ends up guessing blind. A recent support case dragged
+  on because the user debugged via Chat and only got generic
+  steps; Code would have pinpointed the Google Drive File Stream
+  port-9222 conflict from the log in the first turn.
+
+### Changed
+
+- `scripts/inject.js` `listTargets()` no longer assumes a single
+  loopback address. The function now issues parallel requests to
+  the IPv4 and IPv6 loopback endpoints, tolerates one side failing
+  (the common case - only one family is actually listening), and
+  de-duplicates targets by `id` before returning. Behavior is
+  unchanged on machines where only one family is in use; the fix
+  only matters when two apps split the port across families.
+
 ## [0.1.2] - 2026-04-23
 
 ### Added

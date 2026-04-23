@@ -16,6 +16,8 @@
 
 הכל פועל מקומית במחשב שלך. שום דבר לא נשלח ברשת.
 
+> **Windows בלבד.** הכלי לא עובד על macOS או Linux. תוסף Claude ל-Word מבוסס על WebView2 של מיקרוסופט, שקיים רק ב-Windows. ל-Word ל-Mac יש runtime אחר (WKWebView) שלא חושף את אותו debugging interface, וכל שכבת ההפעלה (bat, vbs, PowerShell, Registry, Startup folder) לא רלוונטית שם. אם אתם על Mac, אין port מ-Word.
+
 ## מה הכלי עושה
 
 - קובע `direction: rtl` ויישור טקסט מותאם לעברית בחלונית
@@ -64,7 +66,7 @@
 
 ## דרישות
 
-- Windows 10 או 11
+- **Windows 10 או 11 בלבד.** macOS ו-Linux לא נתמכים (ראו למעלה).
 - Microsoft Word (דסקטופ), עם התוסף Claude מותקן
 - [Node.js](https://nodejs.org/) 16 או חדש יותר (מותקן ונמצא ב-PATH)
 
@@ -104,11 +106,21 @@
 
 כל שלוש הדרכים מסירות: את קיצור ה-Startup, את הרישום ב-Apps and Features (`HKCU\...\Uninstall\ClaudeWordRTL`), את המגש וה-injector, ואת `node_modules`. אם משתנה הסביבה של Auto-enable תואם בדיוק לערך שנכתב ע"י הכלי - הוא גם מוסר. Word עצמו לא משתנה.
 
+## עדכון לגרסה חדשה
+
+שלושה שלבים:
+
+1. הורידו את ה-ZIP החדש מ-[Releases](https://github.com/asaf-aizone/Claude-for-word-RTL-fix/releases/latest) וחלצו מעל תיקיית ההתקנה הקיימת (החליפו קבצים כשמתבקש).
+2. סגרו את Word לחלוטין (גם תהליכי רקע דרך Task Manager במקרה הצורך).
+3. הפעילו `install.bat` מחדש. הסקריפט עוצר את הטריי הישן דרך קובץ ה-PID לפני טעינת הקוד החדש, אז העדכון נכנס לתוקף מיד בלי צורך ב-logout.
+
+לבדיקה שהגרסה החדשה אכן נטענה: `Check for updates...` בתפריט הטריי אמור להראות "You are on the latest version."
+
 ## אבחון, סטטוס ועדכונים
 
 - **אייקון מגש** (tray) - אייקון קטן ליד השעון (ריבוע מעוגל עם האות **W** וחץ RTL לבנים, וצבע רקע שמשקף את המצב), מופעל אוטומטית בכניסה למערכת מתיקיית ה-Startup. ירוק, ה-injector מחובר לפאנל של Claude. אדום, מנותק או שדווחה שגיאה. אפור, בהפעלה. ראה את [האייקון במצב אדום (מנותק)](docs/images/tray-icon-red.png) ובמצב [ירוק (מחובר)](docs/images/tray-icon-green.png). לחיצה ימנית פותחת תפריט. **Connect (relaunch Claude for Word RTL Fix)** - מפעיל את Word דרך ה-wrapper אם הוא סגור, או אם Word כבר פתוח "רגיל" (המקרה הנפוץ), שואל את המשתמש, סוגר אותו בצורה מנומסת ומפעיל אותו מחדש עם RTL - כולל פתיחה אוטומטית של המסמכים שהיו פתוחים. **Disconnect (close Claude for Word RTL Fix)** - כפתור התאוששות כללי: עוצר timers של Connect באמצע, סוגר את Word (מנומס + force כגיבוי), הורג את ה-injector, מנקה קבצי state. **Auto-enable at every Word launch** (checkbox) - מוסיף משתנה סביבה קבוע כך שכל הפעלה עתידית של Word תהיה עם RTL אוטומטית, בלי צורך ב-Connect. **Show diagnostic log** - פותח את `%TEMP%\claude-word-rtl.log` בעורך ברירת המחדל. **Check for updates...** - מריץ את `check-update.js` ומציג דיאלוג עם הסטטוס. אם יש גרסה חדשה, כפתור בלחיצה אחת פותח את דף ההורדה בדפדפן ברירת המחדל. **Uninstall...** - מציג אישור ואז מעביר את השליטה ל-`uninstall.bat` ויוצא. **Exit** - סוגר את ה-tray. רק מופע אחד של tray יכול לרוץ בכל רגע (נאכף ע"י mutex גלובלי), כדי שלא יראו שני אייקונים. בלי תלויות חדשות, הכל על בסיס `System.Windows.Forms.NotifyIcon` המובנה.
 - **`doctor.bat`** - סקריפט אבחון שמריץ 12 בדיקות (Node, npm, תלויות, התקנת Word, פורט 9222, תהליך ה-injector, רשומת Startup, תהליך ה-tray, WebView2 runtime, גרסת Office, רישום ב-Apps and Features) וכותב דוח לקובץ `doctor.log`. צרף אותו כשמדווחים על תקלה.
-- **`check-update.bat`** - פונה ל-GitHub releases API ומודיע אם יש גרסה חדשה יותר. אין תלויות npm, משתמש ב-`https` המובנה של Node. כל עוד אין release פומבי ב-GitHub, הסקריפט יחזיר `[ERROR]` - זה צפוי.
+- **`check-update.bat`** - פונה ל-GitHub releases API ומודיע אם יש גרסה חדשה יותר. אין תלויות npm, משתמש ב-`https` המובנה של Node. **איך בודקים אם יש גרסה חדשה?** הריצו `check-update.bat` או תפריט הטריי "Check for updates...". השוואה מול GitHub releases API, ללא תלויות חיצוניות.
 
 ## איך זה עובד (פסקה אחת)
 
@@ -118,9 +130,12 @@
 
 ## פתרון בעיות
 
+**אבחון מהיר, לפני הטבלה: השתמשו ב-[Claude Code](https://claude.com/claude-code) ולא ב-Claude Chat.** Claude Code רץ מקומית ויכול לקרוא את `%TEMP%\claude-word-rtl.log` ו-`doctor.log` ולהריץ `netstat` כחלק מהאבחון; Chat לא רואה את הקבצים האלה. זרימה: להתקין את Claude Code, לפתוח session בתיקיית ההתקנה, לתאר את הבעיה בעברית. הוא יקרא את הלוגים ויציע תיקון.
+
 - הקובץ `install.log` (נוצר בתיקיית ההתקנה) לוכד את הפלט המלא של הרצת ההתקנה האחרונה. צרף אותו כשאתה מדווח על תקלות.
 - הפעל את `cleanup.bat` אם תהליכי Node נשארים פעילים לאחר סגירת Word.
 - אם הפאנל עדיין מוצג LTR, לחץ קליק ימני על אייקון המגש ובחר **Connect**. אם המגש לא קיים, הפעל בלחיצה כפולה את `scripts\start-tray.vbs`, או צא מהחשבון וחזור כדי שרשומת ה-Startup תיפעל.
+- **הטריי נשאר אדום למרות ש-Auto-enable דלוק, Word פתוח, ו-Node מותקן.** פורט 9222 אולי תפוס בידי אפליקציה אחרת. בודקים ב-cmd: `netstat -ano | findstr :9222`. אם רואים שורה עם PID שאינו של `WINWORD.EXE`, אפליקציה אחרת יושבת על הפורט. אשמים מוכרים: Google Drive File Stream, אפליקציות מבוססות Electron שמריצות עם `--remote-debugging-port=9222`, או WebView2 SDK tools. סוגרים את האפליקציה שתופסת את הפורט (לפי ה-PID וה-process name ב-Task Manager) ואז פותחים את Word מחדש דרך הטריי (Connect). מגרסה 0.1.3 ואילך ה-injector מטפל במקרה שבו גם Drive וגם Word יושבים על 9222 בו-זמנית בגלל IPv4/IPv6 split, אבל אם אף אחד לא מציע panel של Claude, אין מה לתפוס. `doctor.bat` של גרסה 0.1.3 מציג את זה בבירור בשתי הבדיקות החדשות.
 
 ## מגבלות ידועות
 

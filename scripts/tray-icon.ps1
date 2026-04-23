@@ -745,9 +745,19 @@ $tickAction = {
         $tray.Text = 'Claude for Word RTL - connected'
     } elseif ($effective -like 'ERROR:*') {
         $tray.Icon = $iconRed
-        $msg = $effective.Substring(6)
-        if ($msg.Length -gt 55) { $msg = $msg.Substring(0, 55) + '...' }
-        $tray.Text = "Claude for Word RTL - error: $msg"
+        $code = $effective.Substring(6)
+        # Human-friendly tooltip mapping. Fall back to the raw code when
+        # we have no explicit mapping, so future error codes still render.
+        switch ($code) {
+            'port-9222-taken-by-other-app' {
+                $tray.Text = 'Claude for Word RTL - port 9222 used by another app. Run doctor.bat.'
+            }
+            default {
+                $msg = $code
+                if ($msg.Length -gt 55) { $msg = $msg.Substring(0, 55) + '...' }
+                $tray.Text = "Claude for Word RTL - error: $msg"
+            }
+        }
     } else {
         $tray.Icon = $iconRed
         $tray.Text = 'Claude for Word RTL - disconnected'

@@ -295,6 +295,14 @@ async function attach(target) {
 var tickCount = 0;
 var lastTargetsSig = null;
 var lastListErrorMsg = null;
+// Count consecutive ticks where CDP answered with targets but none matched
+// our Claude URL patterns. Used to detect a non-Word app squatting on
+// port 9222 (Edge, another WebView2 host, Electron app, Google Drive File
+// Stream, etc). 3 ticks = 6s at POLL_MS=2000, which clears Word's own
+// WebView2 startup window where the Claude panel may not be advertised yet.
+var portTakenTickStreak = 0;
+var PORT_TAKEN_TICK_THRESHOLD = 3;
+var portTakenReported = false;
 async function tick() {
   tickCount++;
   var targets;
@@ -328,6 +336,39 @@ async function tick() {
     fileLog('targets (tick ' + tickCount + '): ' + sig);
     lastTargetsSig = sig;
   }
+
+  // Port-9222-taken detection: CDP answered with targets but none of them
+  // match the Claude URL patterns. Some other CDP-capable app is on the
+  // port and Word's WebView2 is not. Require a short streak so Word's own
+  // WebView2 startup (where the Claude panel hasn't been advertised yet)
+  // doesn't trigger a false ERROR on the first tick.
+  if (targets.length > 0 && matches.length === 0) {
+    portTakenTickStreak++;
+    if (portTakenTickStreak >= PORT_TAKEN_TICK_THRESHOLD && !portTakenReported) {
+      portTakenReported = true;
+      var sampleUrls = pageTargets.map(function (t) {
+        var u = t.url || '(no url)';
+        return u.length > 80 ? u.substring(0, 80) + '...' : u;
+      });
+      fileLog('port 9222 appears taken by non-Word CDP app after ' +
+        portTakenTickStreak + ' ticks. Non-matching targets: [' +
+        sampleUrls.join(' | ') + ']');
+      writeStatus('ERROR:port-9222-taken-by-other-app');
+    }
+  } else {
+    // Clearing condition: either matches appeared (Word's Claude panel is
+    // up) or targets.length is zero (different problem category, the
+    // listTargets error path handles that). Reset streak + release the
+    // sticky error flag if we set it previously, so attach() can write
+    // CONNECTED again.
+    if (portTakenReported && matches.length > 0) {
+      fileLog('port-9222-taken-by-other-app cleared: Claude target appeared');
+      inErrorState = false;
+    }
+    portTakenTickStreak = 0;
+    portTakenReported = false;
+  }
+
   for (var i = 0; i < matches.length; i++) {
     var t = matches[i];
     if (attached.has(t.id)) continue;
