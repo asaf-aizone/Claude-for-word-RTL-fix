@@ -175,6 +175,21 @@ $script:ConnectState = @{
     DocsTimer     = $null
 }
 
+# Auto-launch of the injector when Word is already up with the WebView2
+# debug port exposed (typically because Auto-enable is on, or because Word
+# was launched via a previous word-wrapper run). Without this, users who
+# enable Auto-enable still have to click Connect after every login - the
+# env var gives Word a debug port, but nothing starts the Node process
+# that attaches to it. The tray is the natural place to own that
+# lifecycle because it is already polling every 2s and already knows
+# both pieces of state (Word running, injector alive).
+#
+# $AutoLaunchLastMs implements a soft cooldown so that if the injector
+# fails to stay alive (missing node_modules, Node uninstalled, crash on
+# startup), we do not spin up a relaunch storm every 2 seconds.
+$script:AutoLaunchLastMs       = 0
+$script:AutoLaunchCooldownMs   = 30000  # 30s - humane if the injector is crash-looping
+
 function Stop-ConnectTimers {
     foreach ($n in @('CloseTimer', 'LaunchTimer', 'DocsTimer')) {
         $t = $script:ConnectState[$n]
@@ -529,17 +544,32 @@ $script:miCheckUpdate.add_Click({
         }
         elseif ($line -match '^\[UPDATE AVAILABLE\]\s*Local\s+(\S+),\s*latest\s+(\S+)\.\s*Download:\s*(\S+)') {
             $local = $matches[1]; $latest = $matches[2]; $url = $matches[3]
+            # Surface the install folder path so the user knows WHERE to
+            # extract the new zip. Without this the user has to remember
+            # where they originally installed (could be Downloads, Tools,
+            # Desktop, anywhere) - common point of confusion in upgrades.
             $ans = [System.Windows.Forms.MessageBox]::Show(
                 "A newer version is available.`n`n" +
                 "Installed: v$local`n" +
                 "Latest:    v$latest`n`n" +
-                "Press OK to open the download page in your default browser.",
+                "To upgrade:`n" +
+                "  1. Download the zip (press OK below).`n" +
+                "  2. Extract it OVER your install folder:`n" +
+                "       $InstallDir`n" +
+                "  3. Run install.bat again. It will stop the old tray`n" +
+                "     and injector, then start the new ones.`n`n" +
+                "Press OK to open the download page, or Cancel to skip.",
                 'Claude for Word RTL - Check for updates',
                 [System.Windows.Forms.MessageBoxButtons]::OKCancel,
                 [System.Windows.Forms.MessageBoxIcon]::Information
             )
             if ($ans -eq [System.Windows.Forms.DialogResult]::OK) {
                 Start-Process $url
+                # Also open the install folder in Explorer so the user can
+                # see where to drop the extracted files. Two windows in
+                # the browser + in Explorer is the shortest path to a
+                # successful upgrade.
+                try { Start-Process explorer.exe -ArgumentList "`"$InstallDir`"" -ErrorAction SilentlyContinue } catch { }
             }
         }
         else {
@@ -680,6 +710,30 @@ $tickAction = {
     # user was stranded with Disconnect greyed out and no recovery path.
     $wordRunning = [bool](Get-Process -Name WINWORD -ErrorAction SilentlyContinue)
     $connectInProgress = ($script:ConnectState.Phase -ne 'Idle')
+
+    # Auto-launch the injector if Word is up but no injector is attached,
+    # and we are not already in the middle of a Connect. Covers the
+    # Auto-enable path (user launches Word directly - no wrapper runs),
+    # and the recovery path (injector crashed while Word stayed up).
+    #
+    # We do NOT check port 9222 here. inject.js polls the port itself
+    # every 2s and attaches when WebView2 comes up; launching it early
+    # just means it idles harmlessly until the Claude panel opens.
+    # Checking port 9222 from the tray every tick would add cost for no
+    # gain (Get-NetTCPConnection is a few hundred ms).
+    if ($wordRunning -and -not $injectorAlive -and -not $connectInProgress) {
+        $nowMs = [Environment]::TickCount
+        if (($nowMs - $script:AutoLaunchLastMs) -ge $script:AutoLaunchCooldownMs) {
+            $autoLaunchVbs = Join-Path $InstallDir 'inject-hidden.vbs'
+            if (Test-Path $autoLaunchVbs) {
+                $script:AutoLaunchLastMs = $nowMs
+                try {
+                    Start-Process -FilePath 'wscript.exe' -ArgumentList "`"$autoLaunchVbs`"" -WindowStyle Hidden -ErrorAction Stop
+                } catch { }
+            }
+        }
+    }
+
     $miConnect.Enabled = (($effective -ne 'CONNECTED') -and (-not $connectInProgress))
     $miDisconnect.Enabled = ($wordRunning -or $injectorAlive -or $connectInProgress)
 

@@ -5,6 +5,66 @@ All notable changes to this project will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.1] - 2026-04-23
+
+### Fixed
+
+- Tray stays red indefinitely when Auto-enable is on. Auto-enable sets
+  the WebView2 debug flag on Word but does not start the Node injector;
+  `word-wrapper.bat` is the only thing that did, and the wrapper only
+  runs via the tray's Connect action. A user who followed the
+  "Auto-enable = set-and-forget" recommendation would open Word at
+  login, see the tray red, click Connect (which closes and reopens
+  Word), and wonder why Auto-enable did not save them the Connect step.
+  The tray now auto-launches the injector when it sees Word running
+  without a live injector, respecting a 30s cooldown to avoid a spin if
+  Node is missing or crashing on startup. Covers both the Auto-enable
+  path (no wrapper) and the recovery path (injector died while Word
+  stayed up).
+- `install.bat` :log helper truncated or broke on any logged string
+  containing a closing parenthesis ")". The if-else body used cmd
+  parens, and cmd treats ")" inside a parens block as the block
+  terminator regardless of quoting. Rewritten without parens, using
+  labels, so logging arbitrary human text is safe.
+- Reinstall-over-top upgrade path did not actually replace the running
+  tray. The tray's singleton mutex caused the freshly-launched tray to
+  exit silently, leaving the OLD tray-icon.ps1 code in memory until
+  logout. Users who applied a patch via "Check for updates" kept
+  seeing the pre-patch behavior. `install.bat` now stops the previous
+  tray (and injector) via their PID files before starting the new
+  tray, so the upgrade takes effect immediately.
+
+### Changed
+
+- Tray "Check for updates..." dialog, when an update exists, now shows
+  the install folder path and opens Explorer there in addition to the
+  download page. Previously the dialog pointed at the browser download
+  only, leaving the user to remember where they installed and extract
+  in the right place - a common source of failed upgrades.
+- README has a new "Updating to a newer version" subsection (Hebrew
+  and English) spelling out the three-step upgrade: extract over,
+  close Word, run install.bat.
+
+### Changed
+
+- `install.bat` now has a fifth step that prompts the user to turn on
+  Auto-enable at install time (recommended, Y/N prompt). On reinstall,
+  the step detects that the variable is already set to our exact value
+  and skips the prompt silently. On a conflicting value, the warning is
+  folded into the same dialog so the user can make an informed choice.
+  The purpose is to get users out of the clunky close-and-reopen-Word
+  Connect flow for every session - with Auto-enable on, Word just opens
+  with RTL ready.
+- `install.bat` Node.js prerequisite check is louder on failure: a full
+  how-to (download LTS from nodejs.org, install with defaults, verify
+  with `node --version`, re-run install.bat) instead of a terse
+  one-liner. Also warns when Node.js is present but below the
+  recommended v16 floor.
+- README install sections (Hebrew + English) lead with a dedicated
+  Node.js callout before the numbered steps, and the steps now begin
+  with "install Node.js" explicitly. The Auto-enable prompt at the end
+  of install.bat is mentioned in the step list so users expect it.
+
 ## [0.1.0] - 2026-04-21
 
 Initial public release.
