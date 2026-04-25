@@ -159,6 +159,48 @@ if errorlevel 1 (
 call :log ""
 
 REM ---------------------------------------------------------------
+REM Migration from v0.1.x: legacy Auto-Enable used a fixed port 9222,
+REM which fails silently when more than one Office app is open at once
+REM (only the first to start grabs 9222; Excel/PowerPoint started after
+REM Word get no debug surface). v0.2.0 switches to dynamic ports via
+REM --remote-debugging-port=0 so each Office process picks its own free
+REM port. If the existing value is exactly our old string, update it
+REM silently - it is our value, we own the migration. Anything else
+REM (already =0, or user-customized) is left untouched.
+REM
+REM Goto/labels on purpose: log strings include "(was fixed port 9222)"
+REM with a closing paren, which would terminate a parens-block early.
+REM ---------------------------------------------------------------
+set "MIG_LEGACY=--remote-debugging-port=9222"
+set "MIG_NEW=--remote-debugging-port=0"
+set "MIG_CHECK=%TEMP%\cwr_mig_check.txt"
+reg query "HKCU\Environment" /v "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS" > "%MIG_CHECK%" 2>nul
+if errorlevel 1 goto :migration_done
+findstr /C:"%MIG_LEGACY%" "%MIG_CHECK%" >nul 2>&1
+if errorlevel 1 goto :migration_done
+REM Defensive: legacy string matched, but make sure the user has not
+REM tacked on extra args after it (e.g. "--remote-debugging-port=9222
+REM --some-other-flag"). Only auto-migrate when the value is EXACTLY
+REM our legacy string with no trailing additions.
+findstr /C:"%MIG_LEGACY% " "%MIG_CHECK%" >nul 2>&1
+if not errorlevel 1 goto :migration_done
+reg add "HKCU\Environment" /v "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS" /t REG_SZ /d "%MIG_NEW%" /f >nul 2>&1
+if errorlevel 1 goto :migration_done
+call :log "  [INFO] Auto-Enable updated to dynamic ports (was fixed port 9222) for Excel + PowerPoint support."
+REM Broadcast WM_SETTINGCHANGE so running processes pick up the new
+REM value without requiring a logout. Same approach as the Auto-Enable
+REM ON path below; temp .ps1 file avoids cmd/PS quoting traps.
+set "MIG_BCAST_PS=%TEMP%\cwr_mig_bcast.ps1"
+>  "%MIG_BCAST_PS%" echo Add-Type -Namespace W -Name E -MemberDefinition '[System.Runtime.InteropServices.DllImport(^"user32.dll^")] public static extern System.IntPtr SendMessageTimeout(System.IntPtr h, uint m, System.UIntPtr w, string l, uint f, uint t, out System.UIntPtr r);'
+>> "%MIG_BCAST_PS%" echo $r=[System.UIntPtr]::Zero
+>> "%MIG_BCAST_PS%" echo [W.E]::SendMessageTimeout([IntPtr]0xFFFF,0x1A,[System.UIntPtr]::Zero,'Environment',2,5000,[ref]$r) ^| Out-Null
+powershell -NoProfile -ExecutionPolicy Bypass -File "%MIG_BCAST_PS%" >nul 2>&1
+del /q "%MIG_BCAST_PS%" >nul 2>&1
+:migration_done
+if exist "%MIG_CHECK%" del /q "%MIG_CHECK%" >nul 2>&1
+call :log ""
+
+REM ---------------------------------------------------------------
 call :log "[5/5] Auto-enable RTL on every Word launch?"
 REM ---------------------------------------------------------------
 REM Sets HKCU\Environment\WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS so every
@@ -178,7 +220,7 @@ REM Skipped silently on reinstall when the variable is already set to
 REM our exact value - no reason to re-prompt.
 
 set "AE_NAME=WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"
-set "AE_VALUE=--remote-debugging-port=9222"
+set "AE_VALUE=--remote-debugging-port=0"
 set "AE_CHECK=%TEMP%\cwr_ae_check.txt"
 set "AE_STATE=unset"
 reg query "HKCU\Environment" /v "%AE_NAME%" > "%AE_CHECK%" 2>nul

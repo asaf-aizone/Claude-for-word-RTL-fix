@@ -114,27 +114,45 @@ $tray.Visible = $true
 
 # Auto-enable state helpers.
 # Persists the WebView2 debug flag as a per-user HKCU environment variable.
-# When set, every new Word launch (from taskbar, Recent, docx double-click,
-# email attachment) picks up --remote-debugging-port=9222 automatically, so
-# the injector attaches immediately without the user having to Connect.
+# When set, every new Office launch (from taskbar, Recent, docx double-click,
+# email attachment) picks up --remote-debugging-port=0 automatically, so
+# WebView2 binds a free dynamic port and the injector discovers it via
+# tasklist+netstat. Multiple Office apps (Word, Excel, PowerPoint) can run
+# simultaneously without colliding on a fixed port.
 #
 # Also affects other WebView2 apps for this user (Teams, Outlook panes,
-# Edge WebView hosts). In practice they don't bind port 9222, but users
-# should know this is broader than Word alone.
+# Edge WebView hosts). With port=0 each host gets its own dynamic port,
+# but users should know the variable is broader than Office alone.
 # $script: prefix is deliberate. Plain $-vars defined at script top level
 # are visible in functions (dynamic scope), but WinForms event-handler
 # scriptblocks are stored by the control and invoked through a stack that
 # has proved unreliable for resolving bare $-vars in some PS 5.1 hosts.
 # Using $script:Name guarantees the reference is resolved against this
 # script's scope no matter how the handler is dispatched.
-$script:AutoEnableValue   = '--remote-debugging-port=9222'
-$script:AutoEnableRegPath = 'HKCU:\Environment'
-$script:AutoEnableRegName = 'WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'
+#
+# AutoEnableLegacyValues: values written by older versions of this tool
+# (v0.1.x used a fixed --remote-debugging-port=9222). They are still
+# considered "ours" - i.e. Get-AutoEnableState reports Enabled=true if it
+# sees one, and toggling OFF / uninstalling will delete the env var when
+# its current value matches either the current or a legacy value. Any
+# other value is treated as user-customized and preserved.
+$script:AutoEnableValue        = '--remote-debugging-port=0'
+$script:AutoEnableLegacyValues = @('--remote-debugging-port=9222')
+$script:AutoEnableRegPath      = 'HKCU:\Environment'
+$script:AutoEnableRegName      = 'WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'
+
+function Test-IsOurAutoEnableValue {
+    param([string]$Value)
+    if ($null -eq $Value) { return $false }
+    if ($Value -eq $script:AutoEnableValue) { return $true }
+    if ($script:AutoEnableLegacyValues -contains $Value) { return $true }
+    return $false
+}
 
 function Get-AutoEnableState {
     try {
         $val = (Get-ItemProperty -Path $script:AutoEnableRegPath -Name $script:AutoEnableRegName -ErrorAction Stop).$script:AutoEnableRegName
-        return @{ Enabled = ($val -eq $script:AutoEnableValue); Value = $val; Exists = $true }
+        return @{ Enabled = (Test-IsOurAutoEnableValue -Value $val); Value = $val; Exists = $true }
     } catch {
         return @{ Enabled = $false; Value = $null; Exists = $false }
     }
@@ -435,7 +453,7 @@ $miAutoEnable.add_Click({
         # already set to something else, fold that warning into the same
         # message so the user reads one dialog, not two.
         $conflictLine = ''
-        if ($state.Exists -and $state.Value -and $state.Value -ne $script:AutoEnableValue) {
+        if ($state.Exists -and $state.Value -and -not (Test-IsOurAutoEnableValue -Value $state.Value)) {
             $conflictLine = ("`n`nWARNING: the environment variable WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS is currently set to:`n" +
                              "  {0}`n" +
                              "Turning Auto-enable on will replace that value.") -f $state.Value
