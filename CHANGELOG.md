@@ -5,6 +5,78 @@ All notable changes to this project will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] - 2026-04-25
+
+### Added
+
+- Excel and PowerPoint support. Opening the Claude add-in in
+  either app now applies the same RTL CSS and typography rules
+  the Word panel has had since v0.1.0, with no extra user step
+  beyond the existing Auto-enable toggle.
+- Dynamic-port discovery in the injector. The fixed
+  `--remote-debugging-port=9222` model collided silently when
+  more than one Office app was open: only the first to launch
+  grabbed 9222, subsequent apps tried the same port, failed
+  silently, and got no debug surface. The injector now sweeps
+  `tasklist` for `msedgewebview2.exe` PIDs, maps each PID to its
+  LISTENING port via `netstat`, and probes every candidate's
+  `/json/list` for Claude targets. Per-target app identification
+  reads the `_host_Info=` URL parameter so Word, Excel, and
+  PowerPoint targets are routed correctly even when they share a
+  WebView2 host.
+- `lib/office-apps.js` and `scripts/port-discovery.js`. The
+  shared foundation for multi-app support, factored out so the
+  injector and the diagnostic probes use the same logic.
+- `probe/launch-office-dynamic.bat` and
+  `probe/dynamic-port-discovery.js`. POC scripts kept in-tree
+  for diagnosing the architecture on a real machine when a user
+  reports a missing app.
+- `probe/text-rendering-tests.js`. Automated suite of 15
+  RTL-and-typography variations per app, run via CDP.
+  45/45 passing on Word + Excel + PowerPoint as of release.
+
+### Changed
+
+- Auto-enable now writes
+  `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=0`
+  instead of `=9222`. With port 0, WebView2 picks a free port
+  per process at init time, so two or three Office apps opened
+  concurrently each get their own debug surface instead of
+  racing for a single fixed port.
+- Migration from v0.1.x is silent. `install.bat` detects the
+  legacy `=9222` value, rewrites it to `=0` in HKCU\Environment,
+  broadcasts `WM_SETTINGCHANGE` so already-running shells pick
+  it up without a logout, and emits a single INFO log line so
+  the change is visible in `install.log`. A defensive
+  trailing-whitespace check skips the migration when the user
+  has appended additional flags, so a hand-edited value is never
+  clobbered.
+- Per-tick injector log line now names the Office app and the
+  dynamic port for each attach, e.g.
+  `Attached & injected: [Excel] port=63650`. When only some
+  apps connect, the log says which.
+- Removed the v0.1.3 "port-9222 squat" detection. It was
+  specific to the fixed-port model where third-party WebView2
+  hosts (Logitech AI Prompt Builder, TeamViewer) could grab
+  9222 ahead of Office. Dynamic ports avoid the pathology by
+  construction, so the bespoke error path is no longer needed.
+
+### Architecture notes
+
+Word and PowerPoint can share a single WebView2 host process,
+and therefore a single port, when both are open at the same
+time. That host serves multiple page targets, one per app,
+distinguished by their `_host_Info=` URL parameter. Discovery
+returns 1-3 ports each hosting 1-3 Claude targets; app identity
+is per-target, not per-port. The injector handles both shapes.
+
+### Known limitations
+
+- Windows-only, unchanged from v0.1.x. Office for Mac uses
+  WKWebView and exposes no equivalent CDP surface.
+- LTSC and volume-licensed Office coverage is unchanged from
+  v0.1.x: untested, not claimed as supported.
+
 ## [0.1.3] - 2026-04-23
 
 ### Fixed
