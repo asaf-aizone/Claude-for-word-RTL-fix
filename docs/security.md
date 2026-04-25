@@ -98,3 +98,30 @@ The core is short enough to audit in one sitting:
 - `install.bat`, `uninstall.bat`, `word-wrapper.bat`, `doctor.bat`, `cleanup.bat`, `start.bat`, `inject-hidden.vbs`, `scripts/start-tray.vbs` - plain-text launchers.
 
 Everything else is documentation.
+
+## Anthropic Terms of Service compliance
+
+This tool operates entirely on the user's machine. It does not access
+Anthropic's API, does not reverse-engineer the Service, does not bypass
+guardrails, rate limits, or safety systems, and does not scrape or
+harvest data. The conversation between the user and Claude is unchanged
+by this tool. The Claude add-in receives the same input and produces
+the same output it would have produced without this tool installed.
+
+What the tool does is restyle the locally-rendered HTML inside
+Microsoft's WebView2 process on the user's own machine, adding RTL CSS
+rules and replacing certain glyphs (em-dash, en-dash, several arrow
+characters) in already-rendered text. Functionally this is equivalent
+to a user stylesheet, a browser accessibility extension, or a screen
+reader: the underlying Service is untouched; only the local rendering
+is adapted so a Hebrew-speaking user can read it.
+
+Anthropic's Acceptable Use Policy and Consumer Terms govern the user's
+account at all times, regardless of whether this tool is installed.
+The user is responsible for compliance with those terms. If Anthropic's
+terms change to restrict client-side modifications, the user should
+comply with Anthropic's terms over this tool.
+
+The tool is open source under Apache 2.0. The full source - injector,
+tray, installer, every script - is auditable in this repository. There
+is no obfuscation, no compiled binary, no closed-source component.

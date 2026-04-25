@@ -593,6 +593,15 @@ itself are untouched - only the panel's local DOM, and only while the panel
 is open.
 </p>
 
+<p>
+The reason this tool exists is accessibility: Hebrew speakers need RTL rendering
+to read Claude's responses inside the add-in. Without it the panel shows Hebrew
+LTR with broken bidi handling, which makes it effectively unusable. The fix is
+an accessibility adaptation applied to locally-rendered output, in the same
+spirit as a user stylesheet (Stylus/Stylish), a screen reader, or a dark-mode
+injector. The underlying Service is not changed in any way.
+</p>
+
 <h2>Features</h2>
 
 <ul>
@@ -785,8 +794,11 @@ Use <strong>Disconnect</strong> when done. Don't run on shared or untrusted mach
 <p><strong>Will Anthropic block me?</strong><br>
 Not expected. The tool only changes how the panel renders in your local DOM.
 It doesn't alter what you send, what Claude returns, rate limits, or
-guardrails. That said, Anthropic's terms of service are what matter and
-responsibility for usage is yours.</p>
+guardrails. Your use of Claude remains governed by Anthropic's Terms of Service
+and Usage Policy regardless of this tool. The tool does not change what you
+send to Claude or what Claude sends back; it only restyles Claude's
+already-rendered output in your local browser. If Anthropic's terms ever change
+to restrict client-side modifications, comply with their terms over this tool.</p>
 
 <p><strong>Does it modify Word?</strong><br>
 It doesn't modify Word itself: no template changes, no add-in patches, no
@@ -921,6 +933,16 @@ to Anthropic or Microsoft. "Claude" is a trademark of Anthropic, PBC.
 "Microsoft" and "Word" are trademarks of Microsoft Corporation. This project
 does not redistribute, modify, or contain proprietary code from either company.
 </p>
+
+<h3>What this tool does NOT do</h3>
+
+<ul>
+  <li>Bypass guardrails, rate limits, or safety systems.</li>
+  <li>Reverse-engineer Anthropic's Services, API, or model.</li>
+  <li>Scrape or harvest data from Claude or the conversation.</li>
+  <li>Provide automated access to Claude. The user drives every conversation manually.</li>
+  <li>Bypass Microsoft's add-in security model. The Office add-in is run unmodified by Word, Excel, or PowerPoint exactly as Anthropic ships it.</li>
+</ul>
 
 <h2>Further reading</h2>
 
