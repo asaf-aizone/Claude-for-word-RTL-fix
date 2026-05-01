@@ -5,77 +5,118 @@ All notable changes to this project will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.2.0] - 2026-04-25
+## [0.2.0] - unreleased
 
-### Added
+### Removed
 
-- Excel and PowerPoint support. Opening the Claude add-in in
-  either app now applies the same RTL CSS and typography rules
-  the Word panel has had since v0.1.0, with no extra user step
-  beyond the existing Auto-enable toggle.
-- Dynamic-port discovery in the injector. The fixed
-  `--remote-debugging-port=9222` model collided silently when
-  more than one Office app was open: only the first to launch
-  grabbed 9222, subsequent apps tried the same port, failed
-  silently, and got no debug surface. The injector now sweeps
-  `tasklist` for `msedgewebview2.exe` PIDs, maps each PID to its
-  LISTENING port via `netstat`, and probes every candidate's
-  `/json/list` for Claude targets. Per-target app identification
-  reads the `_host_Info=` URL parameter so Word, Excel, and
-  PowerPoint targets are routed correctly even when they share a
-  WebView2 host.
-- `lib/office-apps.js` and `scripts/port-discovery.js`. The
-  shared foundation for multi-app support, factored out so the
-  injector and the diagnostic probes use the same logic.
-- `probe/launch-office-dynamic.bat` and
-  `probe/dynamic-port-discovery.js`. POC scripts kept in-tree
-  for diagnosing the architecture on a real machine when a user
-  reports a missing app.
-- `probe/text-rendering-tests.js`. Automated suite of 15
-  RTL-and-typography variations per app, run via CDP.
-  45/45 passing on Word + Excel + PowerPoint as of release.
+- Persistent Auto-enable user environment variable. Earlier
+  versions wrote
+  `HKCU\Environment\WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`
+  with the WebView2 debug flag so every Word launch on the
+  account picked up the flag automatically. The same variable
+  is read by every other WebView2 host on the account
+  (Microsoft Teams, the Outlook reading pane, Edge WebView,
+  the OneDrive UI, etc.), which made the change far broader
+  than its name suggested. Enterprise EDR products
+  (Microsoft Defender for Endpoint, CrowdStrike Falcon,
+  SentinelOne, Sophos) treat unexpected modifications of
+  WebView2 browser arguments as a credential-theft signal and
+  may trigger host isolation on managed devices when this
+  pattern fires alongside the other patterns the installer
+  produces (hidden VBS launcher, PowerShell with
+  `-ExecutionPolicy Bypass`, autoruns from Downloads).
+  v0.2.0 removes the toggle entirely. The WebView2 debug flag
+  is now set in the wrapper's process scope only, inherited
+  by Word but not by Teams/Outlook/Edge.
+- Tray menu's "Auto-enable at every Word launch" checkbox.
+  All RTL activation now flows through Connect, which uses
+  `word-wrapper.bat` to set the flag per-process. The wrapper
+  is the only writer of the debug flag in v0.2.0+.
 
 ### Changed
 
-- Auto-enable now writes
+- `word-wrapper.bat` now sets
   `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=0`
-  instead of `=9222`. With port 0, WebView2 picks a free port
-  per process at init time, so two or three Office apps opened
-  concurrently each get their own debug surface instead of
-  racing for a single fixed port.
-- Migration from v0.1.x is silent. `install.bat` detects the
-  legacy `=9222` value, rewrites it to `=0` in HKCU\Environment,
-  broadcasts `WM_SETTINGCHANGE` so already-running shells pick
-  it up without a logout, and emits a single INFO log line so
-  the change is visible in `install.log`. A defensive
-  trailing-whitespace check skips the migration when the user
-  has appended additional flags, so a hand-edited value is never
-  clobbered.
-- Per-tick injector log line now names the Office app and the
-  dynamic port for each attach, e.g.
-  `Attached & injected: [Excel] port=63650`. When only some
-  apps connect, the log says which.
+  in its own process scope (was `=9222`). Port 0 lets
+  WebView2 pick a free dynamic port per process, so multiple
+  Office apps launched through their respective wrappers each
+  get their own debug surface without colliding.
+- Dynamic-port discovery in the injector. The fixed
+  `--remote-debugging-port=9222` model could not support more
+  than one WebView2 host without silent collisions. The
+  injector now sweeps `tasklist` for `msedgewebview2.exe`
+  PIDs, maps each PID to its LISTENING port via `netstat`,
+  and probes every candidate's `/json/list` for Claude
+  targets. Per-target app identification reads the
+  `_host_Info=` URL parameter so Word, Excel, and
+  PowerPoint targets are routed correctly even when they
+  share a WebView2 host.
+- `install.bat` no longer prompts for Auto-enable. On a
+  reinstall over v0.1.x or an early v0.2.0 build, it
+  silently removes the legacy
+  `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` registry value if
+  it matches one of our known strings (`=9222` or `=0`),
+  so users coming from older versions are migrated
+  automatically. A user-modified value is preserved.
+- `uninstall.bat` cleanup of the legacy env var now matches
+  both `=9222` and `=0`.
 - Removed the v0.1.3 "port-9222 squat" detection. It was
-  specific to the fixed-port model where third-party WebView2
-  hosts (Logitech AI Prompt Builder, TeamViewer) could grab
-  9222 ahead of Office. Dynamic ports avoid the pathology by
-  construction, so the bespoke error path is no longer needed.
+  specific to the fixed-port model where third-party
+  WebView2 hosts (Logitech AI Prompt Builder, TeamViewer)
+  could grab 9222 ahead of Office. Dynamic ports avoid the
+  pathology by construction.
+
+### Added
+
+- `lib/office-apps.js` and `scripts/port-discovery.js`. The
+  shared foundation for multi-app support, factored out so
+  the injector and the diagnostic probes use the same logic.
+- `probe/launch-office-dynamic.bat` and
+  `probe/dynamic-port-discovery.js`. POC scripts kept
+  in-tree for diagnosing the architecture on a real machine
+  when a user reports a missing app.
+- `probe/text-rendering-tests.js`. Automated suite of 15
+  RTL-and-typography variations per app, run via CDP.
+
+### Security
+
+- The installer no longer writes a persistent user-scope
+  environment variable that affects WebView2 hosts beyond
+  Office. This was the single largest signal that triggered
+  enterprise EDR isolation on managed devices when v0.1.x
+  was installed.
+
+### Deferred
+
+- Excel and PowerPoint per-app wrappers (`excel-wrapper.bat`,
+  `powerpoint-wrapper.bat`) plus the matching tray menu
+  Connect entries. The injector and the port-discovery
+  layer already handle all three apps; the user-facing
+  launch path is what remains. Tracked for the next release.
 
 ### Architecture notes
 
-Word and PowerPoint can share a single WebView2 host process,
-and therefore a single port, when both are open at the same
-time. That host serves multiple page targets, one per app,
-distinguished by their `_host_Info=` URL parameter. Discovery
-returns 1-3 ports each hosting 1-3 Claude targets; app identity
-is per-target, not per-port. The injector handles both shapes.
+Word and PowerPoint can share a single WebView2 host
+process, and therefore a single port, when both are open at
+the same time. That host serves multiple page targets, one
+per app, distinguished by their `_host_Info=` URL
+parameter. Discovery returns 1-3 ports each hosting 1-3
+Claude targets; app identity is per-target, not per-port.
+The injector handles both shapes.
 
 ### Known limitations
 
 - Windows-only, unchanged from v0.1.x. Office for Mac uses
   WKWebView and exposes no equivalent CDP surface.
-- LTSC and volume-licensed Office coverage is unchanged from
-  v0.1.x: untested, not claimed as supported.
+- LTSC and volume-licensed Office coverage is unchanged
+  from v0.1.x: untested, not claimed as supported.
+- Managed corporate devices: this tool may still trigger
+  EDR alerts even after the v0.2.0 changes, because the
+  remaining mechanisms (CDP attach to a Microsoft Office
+  process, hidden VBS launcher, autorun from a non-trusted
+  install path) overlap with malware tradecraft. Do not
+  install on a corporate-managed device without explicit
+  prior approval from the responsible security team.
 
 ## [0.1.3] - 2026-04-23
 

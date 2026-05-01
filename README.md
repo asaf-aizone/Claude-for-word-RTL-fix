@@ -20,6 +20,19 @@ PowerShell, Registry, Startup folder) לא רלוונטית שם. אם אתם ע
 </p>
 </blockquote>
 
+<blockquote>
+<p>
+<strong>אזהרה למחשבים מנוהלי-ארגון.</strong> הכלי מתחבר ל-Microsoft Word דרך
+Chrome DevTools Protocol ומזריק JavaScript לתוך WebView2, ומפעיל את עצמו דרך
+VBS hidden launcher ו-PowerShell. הצירוף הזה דומה מבחינה מבנית לטכניקות שגונבי-מידע
+משתמשים בהן, ולכן מערכות EDR ארגוניות (Microsoft Defender for Endpoint, CrowdStrike
+Falcon, SentinelOne, Sophos) עלולות לזהות את ההתקנה כפעילות חשודה ולנתק את המכונה
+מהרשת (host isolation) באופן אוטומטי. <strong>אין להתקין על מחשב מנוהל-ארגון בלי
+אישור מקדים מצוות אבטחת המידע</strong> ובלי הוספת ה-hash וה-path של הקבצים ל-allowlist.
+המחבר אינו אחראי לתגובות מערכות אבטחה ארגוניות.
+</p>
+</blockquote>
+
 <p>
   <a href="#install"><img src="https://img.shields.io/badge/platform-Windows%2010%2F11-blue" alt="Platform"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue" alt="License"></a>

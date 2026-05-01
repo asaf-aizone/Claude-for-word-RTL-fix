@@ -72,11 +72,14 @@ if exist "%TEMP%\claude-word-rtl.status" del /q "%TEMP%\claude-word-rtl.status" 
 echo   [OK] Tray and injector stopped.
 
 REM ---------------------------------------------------------------
-REM Remove Auto-enable env var (if it was set to exactly our value).
-REM We only delete when the value matches ours, so we never clobber a
-REM variable the user set for a different purpose.
+REM Remove legacy Auto-enable env var (only if its value matches one of
+REM our known strings, so we never clobber a variable the user set for
+REM a different purpose). v0.1.x persisted '--remote-debugging-port=9222',
+REM v0.2.0 development builds briefly persisted '--remote-debugging-port=0'.
+REM Both are cleaned here. v0.2.0+ release builds do not write this key
+REM at all; it is removed only as cleanup of older state.
 REM ---------------------------------------------------------------
-powershell -NoProfile -Command "try { $v = (Get-ItemProperty -Path 'HKCU:\Environment' -Name 'WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS' -ErrorAction Stop).'WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'; if ($v -eq '--remote-debugging-port=9222') { Remove-ItemProperty -Path 'HKCU:\Environment' -Name 'WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS' -ErrorAction SilentlyContinue; Add-Type -Namespace W -Name E -MemberDefinition '[System.Runtime.InteropServices.DllImport(\"user32.dll\")] public static extern System.IntPtr SendMessageTimeout(System.IntPtr h,uint m,System.UIntPtr w,string l,uint f,uint t,out System.UIntPtr r);'; $r = [System.UIntPtr]::Zero; [W.E]::SendMessageTimeout([System.IntPtr]0xFFFF, 0x1A, [System.UIntPtr]::Zero, 'Environment', 2, 5000, [ref]$r) | Out-Null; Write-Host '  Removed Auto-enable env var.' } } catch {}"
+powershell -NoProfile -Command "try { $v = (Get-ItemProperty -Path 'HKCU:\Environment' -Name 'WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS' -ErrorAction Stop).'WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'; if ($v -eq '--remote-debugging-port=9222' -or $v -eq '--remote-debugging-port=0') { Remove-ItemProperty -Path 'HKCU:\Environment' -Name 'WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS' -ErrorAction SilentlyContinue; Add-Type -Namespace W -Name E -MemberDefinition '[System.Runtime.InteropServices.DllImport(\"user32.dll\")] public static extern System.IntPtr SendMessageTimeout(System.IntPtr h,uint m,System.UIntPtr w,string l,uint f,uint t,out System.UIntPtr r);'; $r = [System.UIntPtr]::Zero; [W.E]::SendMessageTimeout([System.IntPtr]0xFFFF, 0x1A, [System.UIntPtr]::Zero, 'Environment', 2, 5000, [ref]$r) | Out-Null; Write-Host '  Removed legacy Auto-enable env var.' } } catch {}"
 
 REM ---------------------------------------------------------------
 REM [3/4] Remove Apps and Features registration

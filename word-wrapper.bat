@@ -6,7 +6,16 @@ REM with a document argument).
 
 setlocal EnableDelayedExpansion
 
-set "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222"
+REM Set the WebView2 debug flag in this process scope only. The flag is
+REM inherited by Word (started below via 'start ""') so its WebView2 host
+REM exposes the Chrome DevTools Protocol on a free dynamic port, but it
+REM is NOT inherited by Teams, Outlook, Edge or any other WebView2 host -
+REM those run under separate process trees that never see this variable.
+REM
+REM Port=0 (dynamic) was chosen over a fixed port (legacy 9222) so each
+REM Office process picks its own free port. Required for v0.2.0+ Excel
+REM and PowerPoint support, where multiple Office apps may run together.
+set "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=0"
 
 REM Locate Word
 set "WINWORD=C:\Program Files\Microsoft Office\root\Office16\WINWORD.EXE"
