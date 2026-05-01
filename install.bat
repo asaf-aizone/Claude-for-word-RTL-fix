@@ -39,7 +39,7 @@ if not exist "%TRAYVBS%" (
 )
 
 REM ---------------------------------------------------------------
-call :log "[1/5] Checking prerequisites..."
+call :log "[1/4] Checking prerequisites..."
 REM ---------------------------------------------------------------
 where node >nul 2>&1
 if errorlevel 1 (
@@ -103,7 +103,7 @@ call :log "  [OK] Word found."
 call :log ""
 
 REM ---------------------------------------------------------------
-call :log "[2/5] Installing npm dependencies..."
+call :log "[2/4] Installing npm dependencies..."
 REM ---------------------------------------------------------------
 if not exist "%HERE%\scripts\node_modules\chrome-remote-interface" (
     call :log "  Installing dependencies, ~15 seconds..."
@@ -123,7 +123,7 @@ if not exist "%HERE%\scripts\node_modules\chrome-remote-interface" (
 call :log ""
 
 REM ---------------------------------------------------------------
-call :log "[3/5] Creating Startup-folder entry for the tray icon..."
+call :log "[3/4] Creating Startup-folder entry for the tray icon..."
 REM ---------------------------------------------------------------
 powershell -NoProfile -ExecutionPolicy Bypass -File "%HERE%\scripts\create-shortcut.ps1" -TrayLauncher "%TRAYVBS%" -WorkingDir "%HERE%" -IconPath "%WINWORD%" >> "%LOG%" 2>&1
 if errorlevel 1 (
@@ -135,7 +135,7 @@ if errorlevel 1 (
 call :log ""
 
 REM ---------------------------------------------------------------
-call :log "[4/5] Registering in Windows 'Apps and Features'..."
+call :log "[4/4] Registering in Windows 'Apps and Features'..."
 REM ---------------------------------------------------------------
 REM Per-user HKCU Uninstall key so the tool appears in Settings > Apps >
 REM Installed apps. No admin rights required. UninstallString points at
@@ -143,7 +143,7 @@ REM uninstall.bat, which is what both this key and the tray's Uninstall
 REM menu item invoke.
 set "REGKEY=HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeWordRTL"
 reg add "%REGKEY%" /v DisplayName     /t REG_SZ /d "Claude for Word RTL Fix" /f >nul 2>&1
-reg add "%REGKEY%" /v DisplayVersion  /t REG_SZ /d "0.1.3" /f >nul 2>&1
+reg add "%REGKEY%" /v DisplayVersion  /t REG_SZ /d "0.1.4" /f >nul 2>&1
 reg add "%REGKEY%" /v Publisher       /t REG_SZ /d "Asaf Abramzon" /f >nul 2>&1
 reg add "%REGKEY%" /v InstallLocation /t REG_SZ /d "%HERE%" /f >nul 2>&1
 reg add "%REGKEY%" /v UninstallString /t REG_SZ /d "\"%HERE%\uninstall.bat\"" /f >nul 2>&1
@@ -159,88 +159,43 @@ if errorlevel 1 (
 call :log ""
 
 REM ---------------------------------------------------------------
-call :log "[5/5] Auto-enable RTL on every Word launch?"
+REM Cleanup: legacy Auto-Enable env var from v0.1.0 - v0.1.3 installs.
+REM
+REM Earlier versions persisted
+REM   WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222
+REM as a USER env var so Word would expose CDP on every launch without
+REM the user clicking Connect. That value is also read by every other
+REM WebView2 host on the account (Teams, Outlook, Edge WebView, OneDrive
+REM UI). Enterprise EDR products (Microsoft Defender for Endpoint,
+REM CrowdStrike, SentinelOne) treat unexpected modifications of WebView2
+REM browser arguments as a credential-theft signal and may trigger host
+REM isolation on managed devices.
+REM
+REM v0.1.4 no longer persists this env var. The wrapper (word-wrapper.bat)
+REM sets the flag in its own process scope only, inherited by Word but
+REM not by Teams/Outlook/Edge.
+REM
+REM On install we silently remove the legacy value if (and ONLY if) it
+REM matches our known string. A user-modified value is preserved.
+REM Goto/labels on purpose: log strings may include "(legacy ...)"  with
+REM a closing paren that would terminate a parens-block early.
 REM ---------------------------------------------------------------
-REM Sets HKCU\Environment\WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS so every
-REM Word process this user launches (taskbar, Recent, docx double-click,
-REM email attachment) picks up --remote-debugging-port=9222 at startup.
-REM Without this, the user has to right-click the tray and pick Connect
-REM every session to relaunch Word with the debug port enabled, which is
-REM clunky when Word is already open with documents.
-REM
-REM Prompted (not defaulted) because the variable is user-scoped and
-REM also read by other WebView2 apps on the account (Teams, Outlook
-REM panes, Edge WebView hosts). In practice they don't bind debug port
-REM 9222, but the user deserves a heads-up before we persist user-level
-REM environment state.
-REM
-REM Skipped silently on reinstall when the variable is already set to
-REM our exact value - no reason to re-prompt.
-
-set "AE_NAME=WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"
-set "AE_VALUE=--remote-debugging-port=9222"
+set "AE_LEGACY=--remote-debugging-port=9222"
 set "AE_CHECK=%TEMP%\cwr_ae_check.txt"
-set "AE_STATE=unset"
-reg query "HKCU\Environment" /v "%AE_NAME%" > "%AE_CHECK%" 2>nul
-if exist "%AE_CHECK%" (
-    findstr /I /C:"%AE_NAME%" "%AE_CHECK%" >nul && set "AE_STATE=conflict"
-    findstr /I /C:"%AE_VALUE%" "%AE_CHECK%" >nul && set "AE_STATE=ours"
-    del /q "%AE_CHECK%" >nul 2>&1
-)
-
-set "AUTO_ENABLE_ON="
-if "%AE_STATE%"=="ours" (
-    call :log "  [OK] Auto-enable is already on. Nothing to change."
-    set "AUTO_ENABLE_ON=1"
-    goto :auto_enable_done
-)
-
-call :log "  With Auto-enable ON, every new Word launch picks up the RTL debug"
-call :log "  flag automatically. You will NOT need to right-click the tray and"
-call :log "  pick Connect each time - Word just opens with RTL ready."
-call :log ""
-call :log "  Heads-up: this sets a USER environment variable that is also read"
-call :log "  by other WebView2 apps on your account (Teams, Outlook panes,"
-call :log "  Edge WebView hosts). In practice they do not bind debug port 9222,"
-call :log "  but you should know this affects them too. Uninstall removes it,"
-call :log "  and you can toggle it any time from the tray icon."
-call :log ""
-if "%AE_STATE%"=="conflict" (
-    call :log "  WARNING: the variable is currently set to a different value. If"
-    call :log "  you answer Y, that value will be replaced."
-    call :log ""
-)
-
-choice /c yn /n /m "  Turn Auto-enable ON now? [Y/N] "
-set "CHOICE_ERR=%errorlevel%"
-if "%CHOICE_ERR%"=="2" (
-    call :log "  [SKIP] Auto-enable left off. Use the tray 'Connect' option each time,"
-    call :log "         or enable later from the tray menu."
-    goto :auto_enable_done
-)
-
-reg add "HKCU\Environment" /v "%AE_NAME%" /t REG_SZ /d "%AE_VALUE%" /f >nul 2>&1
-if errorlevel 1 (
-    call :log "  [WARN] Could not write the environment variable. You can toggle"
-    call :log "         Auto-enable later from the tray icon."
-    goto :auto_enable_done
-)
-
-REM Broadcast WM_SETTINGCHANGE so newly-started processes (Explorer, the
-REM tray we're about to launch, any Word launched next) see the new env
-REM var without requiring a logout. Temp .ps1 file avoids cmd/PS quoting
-REM traps when embedding DllImport signatures inline.
-set "BCAST_PS=%TEMP%\cwr_bcast.ps1"
->  "%BCAST_PS%" echo Add-Type -Namespace W -Name E -MemberDefinition '[System.Runtime.InteropServices.DllImport(^"user32.dll^")] public static extern System.IntPtr SendMessageTimeout(System.IntPtr h, uint m, System.UIntPtr w, string l, uint f, uint t, out System.UIntPtr r);'
->> "%BCAST_PS%" echo $r=[System.UIntPtr]::Zero
->> "%BCAST_PS%" echo [W.E]::SendMessageTimeout([IntPtr]0xFFFF,0x1A,[System.UIntPtr]::Zero,'Environment',2,5000,[ref]$r) ^| Out-Null
-powershell -NoProfile -ExecutionPolicy Bypass -File "%BCAST_PS%" >nul 2>&1
-del /q "%BCAST_PS%" >nul 2>&1
-
-call :log "  [OK] Auto-enable turned on. Future Word launches have RTL ready."
-set "AUTO_ENABLE_ON=1"
-
-:auto_enable_done
+reg query "HKCU\Environment" /v "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS" > "%AE_CHECK%" 2>nul
+if errorlevel 1 goto :ae_cleanup_done
+findstr /C:"%AE_LEGACY%" "%AE_CHECK%" >nul 2>&1
+if errorlevel 1 goto :ae_cleanup_done
+REM Defensive: only auto-clean when the value is EXACTLY our legacy
+REM string, no trailing additions the user may have appended.
+findstr /C:"%AE_LEGACY% " "%AE_CHECK%" >nul 2>&1
+if not errorlevel 1 goto :ae_cleanup_done
+reg delete "HKCU\Environment" /v "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS" /f >nul 2>&1
+if errorlevel 1 goto :ae_cleanup_done
+call :log "  [INFO] Removed legacy Auto-Enable env var from older install."
+call :log "         RTL is now activated per-process via the tray Connect menu only."
+:ae_cleanup_done
+if exist "%AE_CHECK%" del /q "%AE_CHECK%" >nul 2>&1
 call :log ""
 
 REM ---------------------------------------------------------------
@@ -279,29 +234,21 @@ call :log "================================================================"
 call :log " Installation complete."
 call :log "================================================================"
 call :log ""
-if defined AUTO_ENABLE_ON (
-    call :log "How to use:"
-    call :log "  Auto-enable is ON. Just open Word normally - the RTL fix is available"
-    call :log "  as soon as you open the Claude panel. The tray icon turns green when"
-    call :log "  the injector attaches."
-    call :log ""
-    call :log "  Word windows that were already running before this install still need"
-    call :log "  one Connect to switch (or close + reopen Word)."
-) else (
-    call :log "How to use:"
-    call :log "  1. Open Word normally (or keep it open)."
-    call :log "  2. Right-click the tray icon near the clock and pick 'Connect'."
-    call :log "     The tray will relaunch Word via the wrapper with RTL enabled,"
-    call :log "     reopening the documents you had open."
-    call :log ""
-    call :log "  Tip: enable 'Auto-enable at every Word launch' from the tray menu"
-    call :log "  to skip Connect entirely in future sessions."
-)
+call :log "How to use:"
+call :log "  1. Open Word normally, or keep it open."
+call :log "  2. Right-click the tray icon near the clock and pick 'Connect'."
+call :log "     The tray will relaunch Word via the wrapper with RTL enabled,"
+call :log "     reopening the documents you had open."
+call :log ""
+call :log "  Connect must be used once per Word session. The RTL flag is set"
+call :log "  per-process by the wrapper, not as a persistent user setting,"
+call :log "  so other apps on your account are never affected."
 call :log ""
 call :log "Security notice:"
-call :log "  While Word is running via this tool, WebView2 debug port 9222"
+call :log "  While Word is running via Connect, WebView2 debug port 9222"
 call :log "  is exposed to local processes on this machine (localhost only,"
-call :log "  not the network). Close Word when you are not using the add-in."
+call :log "  not the network). Only Word is affected, not Teams/Outlook/Edge."
+call :log "  Close Word when you are not using the add-in."
 call :log ""
 call :log "Full log saved to: %LOG%"
 call :log "To remove: run uninstall.bat"

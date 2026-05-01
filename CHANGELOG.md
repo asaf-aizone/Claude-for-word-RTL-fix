@@ -5,6 +5,74 @@ All notable changes to this project will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.4] - 2026-05-01
+
+Security hotfix. No new features. If you are using v0.1.0 -
+v0.1.3, upgrading to v0.1.4 is strongly recommended,
+particularly on managed corporate devices.
+
+### Removed
+
+- Persistent Auto-enable user environment variable.
+  Earlier versions wrote
+  `HKCU\Environment\WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`
+  with the WebView2 debug flag so every Word launch on the
+  account picked up the flag automatically. The same
+  variable is read by every other WebView2 host on the
+  account (Microsoft Teams, the Outlook reading pane, Edge
+  WebView, the OneDrive UI, etc.), which made the change
+  far broader than its name suggested. Enterprise EDR
+  products (Microsoft Defender for Endpoint, CrowdStrike
+  Falcon, SentinelOne, Sophos) treat unexpected
+  modifications of WebView2 browser arguments as a
+  credential-theft signal and may trigger host isolation on
+  managed devices when this pattern fires alongside the
+  other patterns the installer produces (hidden VBS
+  launcher, PowerShell with `-ExecutionPolicy Bypass`,
+  autoruns from a non-trusted install path). v0.1.4 removes
+  the toggle entirely. The WebView2 debug flag is now set
+  in `word-wrapper.bat`'s process scope only, inherited by
+  Word but not by Teams/Outlook/Edge.
+- Tray menu's "Auto-enable at every Word launch" checkbox.
+  All RTL activation now flows through Connect, which uses
+  `word-wrapper.bat` to set the flag per-process.
+
+### Changed
+
+- `install.bat` no longer prompts for Auto-enable at the
+  end of installation. Step count goes from 5 to 4. On a
+  reinstall over v0.1.0 - v0.1.3, it silently removes the
+  legacy `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222`
+  registry value, so users coming from older versions are
+  migrated automatically. A user-modified value is preserved.
+- README.md and README.he.md now lead with a prominent
+  warning for managed corporate devices, advising users
+  not to install without prior approval from their security
+  team.
+
+### Security
+
+- This release exists because of a field incident. A
+  v0.1.3 install on a corporate-managed Windows machine
+  was flagged by EDR as a token-theft attempt and the
+  device was placed in network isolation. Root cause was
+  the user-scope env var setting; once removed, the
+  remaining patterns alone are still detectable but no
+  longer trigger automatic isolation in the products we
+  observed. Managed devices may still surface SmartScreen
+  or generic-untrusted-software warnings; users should
+  obtain explicit IT approval before installing.
+
+### Upgrade notes
+
+Run `install.bat` over your existing install. The legacy
+env var is removed automatically. After upgrade, you must
+use the tray Connect menu once per Word session for RTL,
+even if you previously had Auto-enable on. There is no
+longer a way to make Word launch with RTL automatically
+from the taskbar or from a `.docx` double-click; this is
+intentional, see Removed section.
+
 ## [0.1.3] - 2026-04-23
 
 ### Fixed

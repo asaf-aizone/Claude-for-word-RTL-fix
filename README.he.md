@@ -18,6 +18,8 @@
 
 > **Windows בלבד.** הכלי לא עובד על macOS או Linux. תוסף Claude ל-Word מבוסס על WebView2 של מיקרוסופט, שקיים רק ב-Windows. ל-Word ל-Mac יש runtime אחר (WKWebView) שלא חושף את אותו debugging interface, וכל שכבת ההפעלה (bat, vbs, PowerShell, Registry, Startup folder) לא רלוונטית שם. אם אתם על Mac, אין port מ-Word.
 
+> **אזהרה למחשבים מנוהלי-ארגון.** הכלי מתחבר ל-Microsoft Word דרך Chrome DevTools Protocol ומזריק JavaScript לתוך WebView2, ומפעיל את עצמו דרך VBS hidden launcher ו-PowerShell. הצירוף הזה דומה מבחינה מבנית לטכניקות שגונבי-מידע משתמשים בהן, ולכן מערכות EDR ארגוניות (Microsoft Defender for Endpoint, CrowdStrike Falcon, SentinelOne, Sophos) עלולות לזהות את ההתקנה כפעילות חשודה ולנתק את המכונה מהרשת (host isolation) באופן אוטומטי. **אין להתקין על מחשב מנוהל-ארגון בלי אישור מקדים מצוות אבטחת המידע** ובלי הוספת ה-hash וה-path של הקבצים ל-allowlist. המחבר אינו אחראי לתגובות מערכות אבטחה ארגוניות.
+
 ## מה הכלי עושה
 
 - קובע `direction: rtl` ויישור טקסט מותאם לעברית בחלונית
@@ -88,7 +90,7 @@
 2. לחץ קליק ימני על אייקון המגש ליד השעון ובחר **Connect**.
 3. המגש סוגר בצורה מנומסת את Word, מפעיל אותו מחדש דרך ה-wrapper עם דגל הדיבאג, ופותח מחדש את המסמכים שהיו פתוחים. עברית בפאנל של Claude עכשיו מוצגת RTL.
 
-סטטוס המגש במבט: ירוק, מחובר. אדום, מנותק או שגיאה. אפור, בהפעלה. בתפריט המגש יש גם **Disconnect (close Claude for Word RTL Fix)**, **Auto-enable at every Word launch** (checkbox), **Show diagnostic log**, **Check for updates...**, **Uninstall...** ו-**Exit**.
+סטטוס המגש במבט: ירוק, מחובר. אדום, מנותק או שגיאה. אפור, בהפעלה. בתפריט המגש יש גם **Disconnect (close Claude for Word RTL Fix)**, **Show diagnostic log**, **Check for updates...**, **Uninstall...** ו-**Exit**.
 
 לא משונים שיוכי קבצים, לא מתווספות רשומות לתפריט ההתחלה, ו-Word עצמו לא מתוקן.
 
@@ -118,7 +120,7 @@
 
 ## אבחון, סטטוס ועדכונים
 
-- **אייקון מגש** (tray) - אייקון קטן ליד השעון (ריבוע מעוגל עם האות **W** וחץ RTL לבנים, וצבע רקע שמשקף את המצב), מופעל אוטומטית בכניסה למערכת מתיקיית ה-Startup. ירוק, ה-injector מחובר לפאנל של Claude. אדום, מנותק או שדווחה שגיאה. אפור, בהפעלה. ראה את [האייקון במצב אדום (מנותק)](docs/images/tray-icon-red.png) ובמצב [ירוק (מחובר)](docs/images/tray-icon-green.png). לחיצה ימנית פותחת תפריט. **Connect (relaunch Claude for Word RTL Fix)** - מפעיל את Word דרך ה-wrapper אם הוא סגור, או אם Word כבר פתוח "רגיל" (המקרה הנפוץ), שואל את המשתמש, סוגר אותו בצורה מנומסת ומפעיל אותו מחדש עם RTL - כולל פתיחה אוטומטית של המסמכים שהיו פתוחים. **Disconnect (close Claude for Word RTL Fix)** - כפתור התאוששות כללי: עוצר timers של Connect באמצע, סוגר את Word (מנומס + force כגיבוי), הורג את ה-injector, מנקה קבצי state. **Auto-enable at every Word launch** (checkbox) - מוסיף משתנה סביבה קבוע כך שכל הפעלה עתידית של Word תהיה עם RTL אוטומטית, בלי צורך ב-Connect. **Show diagnostic log** - פותח את `%TEMP%\claude-word-rtl.log` בעורך ברירת המחדל. **Check for updates...** - מריץ את `check-update.js` ומציג דיאלוג עם הסטטוס. אם יש גרסה חדשה, כפתור בלחיצה אחת פותח את דף ההורדה בדפדפן ברירת המחדל. **Uninstall...** - מציג אישור ואז מעביר את השליטה ל-`uninstall.bat` ויוצא. **Exit** - סוגר את ה-tray. רק מופע אחד של tray יכול לרוץ בכל רגע (נאכף ע"י mutex גלובלי), כדי שלא יראו שני אייקונים. בלי תלויות חדשות, הכל על בסיס `System.Windows.Forms.NotifyIcon` המובנה.
+- **אייקון מגש** (tray) - אייקון קטן ליד השעון (ריבוע מעוגל עם האות **W** וחץ RTL לבנים, וצבע רקע שמשקף את המצב), מופעל אוטומטית בכניסה למערכת מתיקיית ה-Startup. ירוק, ה-injector מחובר לפאנל של Claude. אדום, מנותק או שדווחה שגיאה. אפור, בהפעלה. ראה את [האייקון במצב אדום (מנותק)](docs/images/tray-icon-red.png) ובמצב [ירוק (מחובר)](docs/images/tray-icon-green.png). לחיצה ימנית פותחת תפריט. **Connect (relaunch Claude for Word RTL Fix)** - מפעיל את Word דרך ה-wrapper אם הוא סגור, או אם Word כבר פתוח "רגיל" (המקרה הנפוץ), שואל את המשתמש, סוגר אותו בצורה מנומסת ומפעיל אותו מחדש עם RTL - כולל פתיחה אוטומטית של המסמכים שהיו פתוחים. **Disconnect (close Claude for Word RTL Fix)** - כפתור התאוששות כללי: עוצר timers של Connect באמצע, סוגר את Word (מנומס + force כגיבוי), הורג את ה-injector, מנקה קבצי state. **Show diagnostic log** - פותח את `%TEMP%\claude-word-rtl.log` בעורך ברירת המחדל. **Check for updates...** - מריץ את `check-update.js` ומציג דיאלוג עם הסטטוס. אם יש גרסה חדשה, כפתור בלחיצה אחת פותח את דף ההורדה בדפדפן ברירת המחדל. **Uninstall...** - מציג אישור ואז מעביר את השליטה ל-`uninstall.bat` ויוצא. **Exit** - סוגר את ה-tray. רק מופע אחד של tray יכול לרוץ בכל רגע (נאכף ע"י mutex גלובלי), כדי שלא יראו שני אייקונים. בלי תלויות חדשות, הכל על בסיס `System.Windows.Forms.NotifyIcon` המובנה.
 - **`doctor.bat`** - סקריפט אבחון שמריץ 12 בדיקות (Node, npm, תלויות, התקנת Word, פורט 9222, תהליך ה-injector, רשומת Startup, תהליך ה-tray, WebView2 runtime, גרסת Office, רישום ב-Apps and Features) וכותב דוח לקובץ `doctor.log`. צרף אותו כשמדווחים על תקלה.
 - **`check-update.bat`** - פונה ל-GitHub releases API ומודיע אם יש גרסה חדשה יותר. אין תלויות npm, משתמש ב-`https` המובנה של Node. **איך בודקים אם יש גרסה חדשה?** הריצו `check-update.bat` או תפריט הטריי "Check for updates...". השוואה מול GitHub releases API, ללא תלויות חיצוניות.
 

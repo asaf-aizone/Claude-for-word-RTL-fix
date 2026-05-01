@@ -112,49 +112,6 @@ $tray.Icon = $iconGray
 $tray.Text = 'Claude for Word RTL - starting...'
 $tray.Visible = $true
 
-# Auto-enable state helpers.
-# Persists the WebView2 debug flag as a per-user HKCU environment variable.
-# When set, every new Word launch (from taskbar, Recent, docx double-click,
-# email attachment) picks up --remote-debugging-port=9222 automatically, so
-# the injector attaches immediately without the user having to Connect.
-#
-# Also affects other WebView2 apps for this user (Teams, Outlook panes,
-# Edge WebView hosts). In practice they don't bind port 9222, but users
-# should know this is broader than Word alone.
-# $script: prefix is deliberate. Plain $-vars defined at script top level
-# are visible in functions (dynamic scope), but WinForms event-handler
-# scriptblocks are stored by the control and invoked through a stack that
-# has proved unreliable for resolving bare $-vars in some PS 5.1 hosts.
-# Using $script:Name guarantees the reference is resolved against this
-# script's scope no matter how the handler is dispatched.
-$script:AutoEnableValue   = '--remote-debugging-port=9222'
-$script:AutoEnableRegPath = 'HKCU:\Environment'
-$script:AutoEnableRegName = 'WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS'
-
-function Get-AutoEnableState {
-    try {
-        $val = (Get-ItemProperty -Path $script:AutoEnableRegPath -Name $script:AutoEnableRegName -ErrorAction Stop).$script:AutoEnableRegName
-        return @{ Enabled = ($val -eq $script:AutoEnableValue); Value = $val; Exists = $true }
-    } catch {
-        return @{ Enabled = $false; Value = $null; Exists = $false }
-    }
-}
-
-# Win32 broadcast so new processes pick up env var changes without requiring
-# a logout. Without this, HKCU\Environment edits are only honored after the
-# user signs out and back in.
-Add-Type -Namespace ClaudeWordRtl -Name EnvBroadcast -MemberDefinition @'
-[System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto, SetLastError = true)]
-public static extern System.IntPtr SendMessageTimeout(System.IntPtr hWnd, uint Msg, System.UIntPtr wParam, string lParam, uint fuFlags, uint uTimeout, out System.UIntPtr lpdwResult);
-'@
-function Broadcast-EnvChange {
-    $HWND_BROADCAST = [System.IntPtr]0xFFFF
-    $WM_SETTINGCHANGE = 0x1A
-    $SMTO_ABORTIFHUNG = 0x0002
-    $result = [System.UIntPtr]::Zero
-    [ClaudeWordRtl.EnvBroadcast]::SendMessageTimeout($HWND_BROADCAST, $WM_SETTINGCHANGE, [System.UIntPtr]::Zero, 'Environment', $SMTO_ABORTIFHUNG, 5000, [ref]$result) | Out-Null
-}
-
 # Right-click context menu
 $menu = New-Object System.Windows.Forms.ContextMenuStrip
 
@@ -175,14 +132,17 @@ $script:ConnectState = @{
     DocsTimer     = $null
 }
 
-# Auto-launch of the injector when Word is already up with the WebView2
-# debug port exposed (typically because Auto-enable is on, or because Word
-# was launched via a previous word-wrapper run). Without this, users who
-# enable Auto-enable still have to click Connect after every login - the
-# env var gives Word a debug port, but nothing starts the Node process
-# that attaches to it. The tray is the natural place to own that
-# lifecycle because it is already polling every 2s and already knows
-# both pieces of state (Word running, injector alive).
+# Auto-launch of the injector when Word is already up but the injector
+# is gone. Recovery path: the user clicked Connect (so Word was launched
+# via word-wrapper.bat with the WebView2 debug flag set per-process),
+# the injector was started by the wrapper but crashed or was killed
+# while Word stayed up. Without this, the tray would show red until the
+# user manually re-Connected.
+#
+# Note: this path does NOT enable RTL on a Word that was launched
+# directly (taskbar, Recent files, double-click on a .docx). Such a
+# Word has no debug surface to attach to. The user must use Connect
+# to relaunch it through the wrapper.
 #
 # $AutoLaunchLastMs implements a soft cooldown so that if the injector
 # fails to stay alive (missing node_modules, Node uninstalled, crash on
@@ -394,101 +354,6 @@ $miDisconnect.add_Click({
 
 $menu.Items.Add('-') | Out-Null  # separator
 
-# Auto-enable toggle: persist the WebView2 debug flag as a user env var so
-# every new Word launch is RTL-ready without requiring a Connect. Checked
-# state reflects the current HKCU registry value.
-$miAutoEnable = New-Object System.Windows.Forms.ToolStripMenuItem
-$miAutoEnable.Text = 'Auto-enable at every Word launch'
-$miAutoEnable.Checked = (Get-AutoEnableState).Enabled
-$miAutoEnable.add_Click({
-    $state = Get-AutoEnableState
-    if ($state.Enabled) {
-        # Confirm BEFORE removing, so the user can cancel.
-        $ans = [System.Windows.Forms.MessageBox]::Show(
-            "Turn Auto-enable OFF?`n`n" +
-            "Future Word launches will open without the RTL debug flag. You will need to use Connect each time you want RTL in Claude's panel.`n`n" +
-            "Word windows that are open right now are unaffected.`n`n" +
-            "Press OK to turn off, or Cancel to keep Auto-enable on.",
-            'Claude for Word RTL - Auto-enable',
-            [System.Windows.Forms.MessageBoxButtons]::OKCancel,
-            [System.Windows.Forms.MessageBoxIcon]::Question
-        )
-        if ($ans -ne [System.Windows.Forms.DialogResult]::OK) { return }
-        try {
-            Remove-ItemProperty -Path $script:AutoEnableRegPath -Name $script:AutoEnableRegName -ErrorAction Stop
-        } catch {
-            [System.Windows.Forms.MessageBox]::Show(
-                "Failed to remove the environment variable:`n`n" + $_.Exception.Message,
-                'Claude for Word RTL - Auto-enable',
-                [System.Windows.Forms.MessageBoxButtons]::OK,
-                [System.Windows.Forms.MessageBoxIcon]::Error
-            ) | Out-Null
-            return
-        }
-        Broadcast-EnvChange
-        # Verify the change actually took (belt-and-suspenders against silent
-        # no-ops we cannot otherwise catch), and reflect the post-verify state
-        # in the menu so the check-mark never lies.
-        $miAutoEnable.Checked = (Get-AutoEnableState).Enabled
-    } else {
-        # Compose a single confirm-before-acting dialog. If the env var is
-        # already set to something else, fold that warning into the same
-        # message so the user reads one dialog, not two.
-        $conflictLine = ''
-        if ($state.Exists -and $state.Value -and $state.Value -ne $script:AutoEnableValue) {
-            $conflictLine = ("`n`nWARNING: the environment variable WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS is currently set to:`n" +
-                             "  {0}`n" +
-                             "Turning Auto-enable on will replace that value.") -f $state.Value
-        }
-        $ans = [System.Windows.Forms.MessageBox]::Show(
-            "Turn Auto-enable ON?`n`n" +
-            "This will set a user-level environment variable so every new Word launch on this account has RTL available automatically - no Connect needed.`n`n" +
-            "Word windows that are already open still need one Connect to switch.`n`n" +
-            "Heads-up: the same variable may be read by other WebView2 apps on your account (Teams, Outlook, Edge WebView hosts). In practice they do not bind debug port 9222, but you should know. You can uncheck this item at any time to remove it." +
-            $conflictLine + "`n`n" +
-            "Press OK to turn on, or Cancel to leave Auto-enable off.",
-            'Claude for Word RTL - Auto-enable',
-            [System.Windows.Forms.MessageBoxButtons]::OKCancel,
-            [System.Windows.Forms.MessageBoxIcon]::Question
-        )
-        if ($ans -ne [System.Windows.Forms.DialogResult]::OK) { return }
-        try {
-            # -Type String forces REG_SZ even when creating the property from
-            # scratch (Set-ItemProperty has been observed to no-op without
-            # complaint in some PS 5.1 hosts when the property does not yet
-            # exist and no type is specified).
-            Set-ItemProperty -Path $script:AutoEnableRegPath -Name $script:AutoEnableRegName -Value $script:AutoEnableValue -Type String -ErrorAction Stop
-        } catch {
-            [System.Windows.Forms.MessageBox]::Show(
-                "Failed to set the environment variable:`n`n" + $_.Exception.Message,
-                'Claude for Word RTL - Auto-enable',
-                [System.Windows.Forms.MessageBoxButtons]::OK,
-                [System.Windows.Forms.MessageBoxIcon]::Error
-            ) | Out-Null
-            return
-        }
-        Broadcast-EnvChange
-        # Re-read to confirm the write actually persisted before claiming
-        # victory in the UI. If verification fails we surface it to the user
-        # instead of a misleading check-mark.
-        $postState = Get-AutoEnableState
-        $miAutoEnable.Checked = $postState.Enabled
-        if (-not $postState.Enabled) {
-            [System.Windows.Forms.MessageBox]::Show(
-                "Auto-enable appeared to succeed, but re-reading HKCU\Environment did not find the expected value. The registry write may have been blocked by a policy or security product. Try running install.bat again, or set the variable manually via Windows Settings > System > About > Advanced system settings > Environment variables:`n`n" +
-                "  Name:  $($script:AutoEnableRegName)`n" +
-                "  Value: $($script:AutoEnableValue)",
-                'Claude for Word RTL - Auto-enable',
-                [System.Windows.Forms.MessageBoxButtons]::OK,
-                [System.Windows.Forms.MessageBoxIcon]::Warning
-            ) | Out-Null
-        }
-    }
-}) | Out-Null
-$menu.Items.Add($miAutoEnable) | Out-Null
-
-$menu.Items.Add('-') | Out-Null  # separator
-
 $miShowLog = $menu.Items.Add('Show diagnostic log')
 $miShowLog.add_Click({
     # Opens the injector's rolling log in notepad. Useful when a user
@@ -615,7 +480,7 @@ $miUninstall.add_Click({
         "  - Remove the Startup entry and the Apps and Features registration`n" +
         "  - Stop the tray and the injector`n" +
         "  - Clean node_modules and temp status files`n" +
-        "  - Turn off Auto-enable (remove the WebView2 env var) if it is on`n`n" +
+        "  - Remove any legacy WebView2 env var written by older installs`n`n" +
         "Word itself is not modified. The install folder stays in place -" +
         " you can delete it manually afterward.",
         'Claude for Word RTL - Uninstall',
@@ -712,9 +577,10 @@ $tickAction = {
     $connectInProgress = ($script:ConnectState.Phase -ne 'Idle')
 
     # Auto-launch the injector if Word is up but no injector is attached,
-    # and we are not already in the middle of a Connect. Covers the
-    # Auto-enable path (user launches Word directly - no wrapper runs),
-    # and the recovery path (injector crashed while Word stayed up).
+    # and we are not already in the middle of a Connect. Recovery path
+    # for the case where the injector crashed while Word (started via
+    # Connect) stayed up. If Word was started directly without Connect,
+    # it has no debug surface and the relaunched injector just idles.
     #
     # We do NOT check port 9222 here. inject.js polls the port itself
     # every 2s and attaches when WebView2 comes up; launching it early
