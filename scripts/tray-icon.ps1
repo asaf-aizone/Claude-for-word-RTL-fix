@@ -1,15 +1,23 @@
-# Claude for Word RTL - system tray status indicator.
+# Claude for Office RTL - system tray status indicator.
 #
 # Standalone PowerShell script that shows a colored tray icon reflecting the
 # connection status of the Node injector (inject.js).
 #
-# Communication is one-way via a status file:
-#   %TEMP%\claude-word-rtl.status
-# Contents (one line):
-#   CONNECTED        - injector attached to at least one CDP target
-#   DISCONNECTED     - no targets attached / injector exited
-#   ERROR:<message>  - a fault was reported (e.g. DOM selectors no longer match)
-# Missing file is treated as DISCONNECTED.
+# Communication is two-way via files in %TEMP%:
+#   claude-word-rtl.status       - aggregate state, drives icon color.
+#                                  Contents (one line):
+#                                    CONNECTED        - injector attached to >=1 CDP target
+#                                    DISCONNECTED     - no targets attached / injector exited
+#                                    ERROR:<message>  - a fault was reported
+#                                  Missing file is treated as DISCONNECTED.
+#   claude-office-rtl.apps.json  - per-app state, drives the 3 status labels.
+#                                  Contents: {"Word":"CONNECTED","Excel":"DISCONNECTED",...}
+#                                  Missing file is treated as all DISCONNECTED.
+#
+# v0.2.0 expanded this from Word-only to Word + Excel + PowerPoint. The mutex,
+# status file, PID file, lock file paths all keep the legacy "claude-word-rtl"
+# prefix so a v0.2.0 tray launching during a v0.1.x reinstall window does not
+# spawn duplicates and the prior PID files are still recognised.
 #
 # Zero npm dependencies. Uses System.Windows.Forms.NotifyIcon only.
 
@@ -17,15 +25,19 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 if (-not $PSScriptRoot) { $PSScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path }
-$StatusFile = Join-Path $env:TEMP 'claude-word-rtl.status'
-$PidFile    = Join-Path $env:TEMP 'claude-word-rtl.pid'
-$LockFile   = Join-Path $env:TEMP 'claude-word-rtl.lock'
-$TrayPidFile = Join-Path $env:TEMP 'claude-word-rtl.tray.pid'
-$InstallDir = Split-Path -Parent $PSScriptRoot  # parent of \scripts
+$StatusFile     = Join-Path $env:TEMP 'claude-word-rtl.status'
+$AppsStatusFile = Join-Path $env:TEMP 'claude-office-rtl.apps.json'
+$PidFile        = Join-Path $env:TEMP 'claude-word-rtl.pid'
+$LockFile       = Join-Path $env:TEMP 'claude-word-rtl.lock'
+$TrayPidFile    = Join-Path $env:TEMP 'claude-word-rtl.tray.pid'
+$InstallDir     = Split-Path -Parent $PSScriptRoot  # parent of \scripts
 
 # Singleton enforcement: a global mutex guarantees only one tray process
 # exists per user session. Second launches exit immediately so the user
 # never sees duplicate icons in the notification area.
+# The mutex name keeps the legacy "ClaudeWordRtl" prefix so a v0.2.0 tray
+# launched during a v0.1.x reinstall window correctly defers to the running
+# v0.1.x tray (and vice versa) instead of spawning a duplicate icon.
 $createdNew = $false
 $script:TrayMutex = New-Object System.Threading.Mutex($true, 'Global\ClaudeWordRtlTrayMutex', [ref]$createdNew)
 if (-not $createdNew) {
@@ -41,18 +53,30 @@ Set-Content -Path $TrayPidFile -Value $PID -Encoding ASCII -ErrorAction Silently
 # seconds and the injector process is gone, we treat the status as stale.
 $StaleSeconds = 15
 
+# Office app metadata table. Single source of truth for the tray's per-app
+# loops. Keep in sync with lib/office-apps.js APPS array on the Node side.
+# DocCollection is the COM property name used to enumerate open documents
+# on each app, used by the Connect flow to remember which docs to reopen
+# after relaunch via the wrapper. ProcessName is the executable basename
+# without .EXE (matches Get-Process -Name semantics).
+$Apps = @(
+    @{ Name = 'Word';       ProcessName = 'WINWORD';  ProgId = 'Word.Application';       Wrapper = 'word-wrapper.bat';       DocCollection = 'Documents'    }
+    @{ Name = 'Excel';      ProcessName = 'EXCEL';    ProgId = 'Excel.Application';      Wrapper = 'excel-wrapper.bat';      DocCollection = 'Workbooks'    }
+    @{ Name = 'PowerPoint'; ProcessName = 'POWERPNT'; ProgId = 'PowerPoint.Application'; Wrapper = 'powerpoint-wrapper.bat'; DocCollection = 'Presentations' }
+)
+
 # Win32 DestroyIcon P/Invoke so we can release GDI handles produced by
 # Bitmap.GetHicon() without leaking across icon swaps.
 Add-Type -MemberDefinition '[System.Runtime.InteropServices.DllImport("user32.dll", SetLastError=true)] public static extern bool DestroyIcon(System.IntPtr hIcon);' -Name NativeMethods -Namespace ClaudeWordRtl -PassThru | Out-Null
 
-# Build two solid-color 16x16 bitmaps and convert to icons. Using Bitmap
+# Build solid-color 16x16 bitmaps and convert to icons. Using Bitmap
 # avoids shipping .ico files and keeps colors meaningful (green = live,
 # red = dead, gray = starting).
 $script:IconHandles = @()
-# Icon design: 16x16, status-colored rounded square background, white "W"
-# (for Word) in the center, tiny white RTL arrow in the corner. The W
-# conveys "Word", the arrow conveys "RTL direction fix", and the fill
-# color conveys injector state.
+# Icon design: 16x16, status-colored rounded square background, white "O"
+# (for Office) in the center, tiny white RTL arrow in the corner. The "O"
+# conveys "Office" (covering Word, Excel, PowerPoint), the arrow conveys
+# "RTL direction fix", and the fill color conveys injector state.
 function New-ColorIcon([System.Drawing.Color]$color) {
     $bmp = New-Object System.Drawing.Bitmap 16, 16
     $g   = [System.Drawing.Graphics]::FromImage($bmp)
@@ -86,13 +110,13 @@ function New-ColorIcon([System.Drawing.Color]$color) {
     $shaftPen = New-Object System.Drawing.Pen ([System.Drawing.Color]::White), 2
     $g.DrawLine($shaftPen, 7, 3, 14, 3)
 
-    # White "W" in the bottom half of the icon
+    # White "O" in the bottom half of the icon (Office-wide branding)
     $font  = New-Object System.Drawing.Font ('Segoe UI', 9, [System.Drawing.FontStyle]::Bold, [System.Drawing.GraphicsUnit]::Pixel)
     $sf = New-Object System.Drawing.StringFormat
     $sf.Alignment = [System.Drawing.StringAlignment]::Center
     $sf.LineAlignment = [System.Drawing.StringAlignment]::Center
     $textRect = New-Object System.Drawing.RectangleF 0, 6, 16, 10
-    $g.DrawString('W', $font, $white, $textRect, $sf)
+    $g.DrawString('O', $font, $white, $textRect, $sf)
 
     $bg.Dispose(); $path.Dispose(); $font.Dispose()
     $white.Dispose(); $sf.Dispose(); $shaftPen.Dispose()
@@ -109,21 +133,25 @@ $iconGray  = New-ColorIcon ([System.Drawing.Color]::FromArgb(140, 140, 140))
 
 $tray = New-Object System.Windows.Forms.NotifyIcon
 $tray.Icon = $iconGray
-$tray.Text = 'Claude for Word RTL - starting...'
+$tray.Text = 'Claude for Office RTL - starting...'
 $tray.Visible = $true
 
 # Right-click context menu
 $menu = New-Object System.Windows.Forms.ContextMenuStrip
 
 # Connect flow is implemented as a Timer-driven state machine so the UI
-# thread is never blocked waiting for Word to close or launch. Blocking
-# the UI thread freezes the tray menu (the user sees it "stuck" on screen
-# until the handler returns). Using timers keeps the tray responsive and
-# lets us show progress / error dialogs without racing the menu.
+# thread is never blocked waiting for an Office app to close or launch.
+# Blocking the UI thread freezes the tray menu (the user sees it "stuck"
+# on screen until the handler returns). Using timers keeps the tray
+# responsive and lets us show progress / error dialogs without racing
+# the menu.
 #
-# State lives in $script:ConnectState across timer ticks.
+# State lives in $script:ConnectState across timer ticks. Only ONE Connect
+# flow runs at a time across all three apps; the App field records which
+# app it targets (used for the wrapper path, COM enum, and dialog titles).
 $script:ConnectState = @{
     Phase         = 'Idle'    # Idle | WaitingForClose | Launching
+    App           = $null     # one of the $Apps entries when Phase != Idle
     DocsToReopen  = @()
     WaitedMs      = 0
     DocIndex      = 0
@@ -132,18 +160,18 @@ $script:ConnectState = @{
     DocsTimer     = $null
 }
 
-# Auto-launch of the injector when Word is already up but the injector
-# is gone. Recovery path: the user clicked Connect (so Word was launched
-# via word-wrapper.bat, with the WebView2 debug flag set per-process),
-# the injector was started by the wrapper but crashed or was killed
-# while Word stayed up. Without this, the tray would show red until the
-# user manually re-Connected. The tray is the natural place to own the
-# relaunch because it is already polling every 2s and already knows
-# both pieces of state (Word running, injector alive).
+# Auto-launch of the injector when an Office app is already up but the
+# injector is gone. Recovery path: the user clicked Connect (so the app
+# was launched via its wrapper, with the WebView2 debug flag set
+# per-process), the injector was started by the wrapper but crashed or
+# was killed while the app stayed up. Without this, the tray would show
+# red until the user manually re-Connected. The tray is the natural place
+# to own the relaunch because it is already polling every 2s and already
+# knows both pieces of state (any Office app running, injector alive).
 #
-# Note: this path does NOT enable RTL on a Word that was launched
-# directly (taskbar, Recent files, double-click on a .docx). Such a
-# Word has no debug surface to attach to. The user must use Connect
+# Note: this path does NOT enable RTL on an Office app that was launched
+# directly (taskbar, Recent files, double-click on a .docx/.xlsx/.pptx).
+# Such an app has no debug surface to attach to. The user must use Connect
 # to relaunch it through the wrapper.
 #
 # $AutoLaunchLastMs implements a soft cooldown so that if the injector
@@ -158,13 +186,17 @@ function Stop-ConnectTimers {
         if ($t) { $t.Stop(); $t.Dispose(); $script:ConnectState[$n] = $null }
     }
     $script:ConnectState.Phase = 'Idle'
+    $script:ConnectState.App   = $null
 }
 
 function Start-Launch-Phase {
-    # Called after Word has exited (or was never running). Launches the
-    # wrapper with the first queued doc; subsequent docs are opened by
-    # DocsTimer with spacing so Word has time to come up before each.
-    $wrapper = Join-Path $InstallDir 'word-wrapper.bat'
+    # Called after the target Office app has exited (or was never running).
+    # Launches the per-app wrapper with the first queued doc; subsequent
+    # docs are opened by DocsTimer with spacing so the app has time to
+    # come up before each.
+    $app = $script:ConnectState.App
+    if (-not $app) { Stop-ConnectTimers; return }
+    $wrapper = Join-Path $InstallDir $app.Wrapper
     $docs = $script:ConnectState.DocsToReopen
     $script:ConnectState.Phase = 'Launching'
     $script:ConnectState.DocIndex = 0
@@ -182,14 +214,16 @@ function Start-Launch-Phase {
         return
     }
 
-    # Space additional docs out so Word attaches each one to the same
-    # running Winword. First extra waits 3s, subsequent 400ms.
+    # Space additional docs out so the Office app attaches each one to
+    # the same running process. First extra waits 3s, subsequent 400ms.
     $docsTimer = New-Object System.Windows.Forms.Timer
     $docsTimer.Interval = 3000
     $docsTimer.add_Tick({
         $i = $script:ConnectState.DocIndex
         $docs = $script:ConnectState.DocsToReopen
-        $wrapper = Join-Path $InstallDir 'word-wrapper.bat'
+        $a = $script:ConnectState.App
+        if (-not $a) { Stop-ConnectTimers; return }
+        $wrapper = Join-Path $InstallDir $a.Wrapper
         if ($i -ge $docs.Count) {
             Stop-ConnectTimers
             return
@@ -202,25 +236,32 @@ function Start-Launch-Phase {
     $docsTimer.Start()
 }
 
-$miConnect = $menu.Items.Add('Connect (relaunch Claude for Word RTL Fix)')
-$miConnect.add_Click({
-    # Guard against double-clicks while a previous Connect is mid-flight.
+function Start-ConnectFor($app) {
+    # Per-app Connect handler. Identical state machine to the Word-only
+    # v0.1.x flow, generalized over $app. The 3 menu items (Connect Word,
+    # Connect Excel, Connect PowerPoint) all dispatch here.
+
+    # Guard against double-clicks and against starting a second Connect
+    # while a previous one (possibly for a different app) is mid-flight.
     if ($script:ConnectState.Phase -ne 'Idle') { return }
 
-    $wrapper = Join-Path $InstallDir 'word-wrapper.bat'
+    $wrapper = Join-Path $InstallDir $app.Wrapper
     if (-not (Test-Path $wrapper)) { return }
 
-    $running = Get-Process -Name WINWORD -ErrorAction SilentlyContinue
+    $running = Get-Process -Name $app.ProcessName -ErrorAction SilentlyContinue
     $docsToReopen = @()
     $hasUnsaved = $false
 
     if ($running) {
-        # Enumerate open documents via COM before closing Word so we can
-        # reopen them under the RTL session. Untitled new documents
-        # (Document1, etc.) have no real path - skip and warn.
+        # Enumerate open documents via COM before closing the app so we
+        # can reopen them under the RTL session. Untitled new documents
+        # have no real path - skip and warn. Each Office app exposes a
+        # different collection (Documents/Workbooks/Presentations) with
+        # the same .FullName item shape, so the loop is identical.
         try {
-            $wordApp = [Runtime.InteropServices.Marshal]::GetActiveObject('Word.Application')
-            foreach ($doc in $wordApp.Documents) {
+            $comApp = [Runtime.InteropServices.Marshal]::GetActiveObject($app.ProgId)
+            $collection = $comApp.($app.DocCollection)
+            foreach ($doc in $collection) {
                 $full = $doc.FullName
                 if ($full -and ($full -match '[\\/:]')) {
                     $docsToReopen += $full
@@ -228,7 +269,7 @@ $miConnect.add_Click({
                     $hasUnsaved = $true
                 }
             }
-            [Runtime.InteropServices.Marshal]::ReleaseComObject($wordApp) | Out-Null
+            [Runtime.InteropServices.Marshal]::ReleaseComObject($comApp) | Out-Null
         } catch {
             $docsToReopen = @()
         }
@@ -237,15 +278,15 @@ $miConnect.add_Click({
             "`nOpen documents will be reopened automatically:`n" + (($docsToReopen | ForEach-Object { '  - ' + (Split-Path -Leaf $_) }) -join "`n") + "`n"
         } else { '' }
         $unsavedLine = if ($hasUnsaved) {
-            "`nWARNING: you have at least one UNSAVED document. Save it first, or it will be lost when Word closes.`n"
+            "`nWARNING: you have at least one UNSAVED document. Save it first, or it will be lost when $($app.Name) closes.`n"
         } else { '' }
 
         $ans = [System.Windows.Forms.MessageBox]::Show(
-            "Word is currently running without the RTL debug flag.`n`n" +
-            "To enable the RTL fix, Word must be closed and reopened." +
+            "$($app.Name) is currently running without the RTL debug flag.`n`n" +
+            "To enable the RTL fix, $($app.Name) must be closed and reopened." +
             $docLine + $unsavedLine + "`n" +
-            'Close Word now and relaunch with RTL?',
-            'Claude for Word RTL - Connect',
+            "Close $($app.Name) now and relaunch with RTL?",
+            "Claude for Office RTL - Connect $($app.Name)",
             [System.Windows.Forms.MessageBoxButtons]::OKCancel,
             [System.Windows.Forms.MessageBoxIcon]::Question
         )
@@ -253,6 +294,7 @@ $miConnect.add_Click({
 
         # Kick off graceful close, then poll asynchronously via a Timer.
         # The handler returns immediately so the tray menu/UI stays live.
+        $script:ConnectState.App = $app
         $script:ConnectState.DocsToReopen = $docsToReopen
         $script:ConnectState.WaitedMs = 0
         $script:ConnectState.Phase = 'WaitingForClose'
@@ -261,12 +303,17 @@ $miConnect.add_Click({
         $closeTimer = New-Object System.Windows.Forms.Timer
         $closeTimer.Interval = 250
         $closeTimer.add_Tick({
-            $stillRunning = [bool](Get-Process -Name WINWORD -ErrorAction SilentlyContinue)
+            $a = $script:ConnectState.App
+            if (-not $a) { Stop-ConnectTimers; return }
+            $stillRunning = [bool](Get-Process -Name $a.ProcessName -ErrorAction SilentlyContinue)
             if (-not $stillRunning) {
                 $script:ConnectState.CloseTimer.Stop()
                 $script:ConnectState.CloseTimer.Dispose()
                 $script:ConnectState.CloseTimer = $null
-                # Brief pause for port 9222 to free up before relaunch.
+                # Brief pause for the WebView2 debug port to free up
+                # before relaunch. Even with dynamic ports we keep the
+                # delay because the Office process itself needs a moment
+                # to fully unwind before we spawn a new one.
                 $delay = New-Object System.Windows.Forms.Timer
                 $delay.Interval = 500
                 $delay.add_Tick({
@@ -284,17 +331,18 @@ $miConnect.add_Click({
                 $script:ConnectState.CloseTimer.Stop()
                 $script:ConnectState.CloseTimer.Dispose()
                 $script:ConnectState.CloseTimer = $null
+                $aName = $script:ConnectState.App.Name
                 $force = [System.Windows.Forms.MessageBox]::Show(
-                    "Word did not close within 10 seconds.`n`n" +
-                    "This usually means Word is showing a dialog (save prompt, add-in message) that is blocking shutdown.`n`n" +
-                    "Press OK to force-close Word and relaunch with RTL. WARNING: any unsaved changes will be LOST.`n`n" +
-                    "Press Cancel to leave Word as-is. You can respond to the dialog and try Connect again.",
-                    'Claude for Word RTL - Connect',
+                    "$aName did not close within 10 seconds.`n`n" +
+                    "This usually means $aName is showing a dialog (save prompt, add-in message) that is blocking shutdown.`n`n" +
+                    "Press OK to force-close $aName and relaunch with RTL. WARNING: any unsaved changes will be LOST.`n`n" +
+                    "Press Cancel to leave $aName as-is. You can respond to the dialog and try Connect again.",
+                    "Claude for Office RTL - Connect $aName",
                     [System.Windows.Forms.MessageBoxButtons]::OKCancel,
                     [System.Windows.Forms.MessageBoxIcon]::Warning
                 )
                 if ($force -eq [System.Windows.Forms.DialogResult]::OK) {
-                    Get-Process -Name WINWORD -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+                    Get-Process -Name $script:ConnectState.App.ProcessName -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
                     Start-Sleep -Milliseconds 400  # short, after force kill
                     Start-Launch-Phase
                 } else {
@@ -307,41 +355,85 @@ $miConnect.add_Click({
         return
     }
 
-    # Word not running - launch directly.
+    # App not running - launch directly.
+    $script:ConnectState.App = $app
     $script:ConnectState.DocsToReopen = @()
     Start-Launch-Phase
-}) | Out-Null
+}
 
-$miDisconnect = $menu.Items.Add('Disconnect (close Claude for Word RTL Fix)')
-$miDisconnect.add_Click({
+# --- Status labels (top of menu, refreshed each tick) ---
+# 3 disabled menu items showing per-app state: "Word: connected", etc.
+# Stored in a parallel array so the tick handler can update Text in place.
+$script:StatusItems = @{}
+foreach ($a in $Apps) {
+    $mi = $menu.Items.Add("$($a.Name): not running")
+    $mi.Enabled = $false
+    $script:StatusItems[$a.Name] = $mi
+}
+
+$menu.Items.Add('-') | Out-Null  # separator
+
+# --- Connect items, one per app ---
+$script:ConnectItems = @{}
+foreach ($a in $Apps) {
+    $captured = $a   # capture for closure (PowerShell foreach var is shared)
+    $mi = $menu.Items.Add("Connect $($captured.Name)")
+    # ScriptBlock::Create + GetNewClosure avoids the classic PowerShell
+    # foreach-closure-trap where every handler ends up bound to the last
+    # iteration's $a. Using a parameterized scriptblock invoked with the
+    # captured value sidesteps the trap cleanly.
+    $handler = {
+        param($appArg)
+        Start-ConnectFor $appArg
+    }.GetNewClosure()
+    $mi.add_Click({
+        Start-ConnectFor $captured
+    }.GetNewClosure()) | Out-Null
+    $script:ConnectItems[$a.Name] = $mi
+}
+
+$menu.Items.Add('-') | Out-Null  # separator
+
+# --- Disconnect all ---
+$miDisconnectAll = $menu.Items.Add('Disconnect all')
+$miDisconnectAll.add_Click({
     # Tears down whatever state is active. Three independent things might
-    # need stopping: a Connect flow mid-flight, the injector, and Word
-    # itself. We stop each one if present. This makes Disconnect the
-    # universal "recover from any state" button, which is important because
-    # a failed Connect (Word refused to launch, injector running but can
-    # not attach) previously left the user stranded.
+    # need stopping: a Connect flow mid-flight, the injector, and any of
+    # the three Office apps. We stop each one if present. This makes
+    # Disconnect-all the universal "recover from any state" button, which
+    # is important because a failed Connect (app refused to launch,
+    # injector running but cannot attach) previously left the user
+    # stranded.
 
     # 1. Cancel any in-progress Connect flow so its Timers stop firing.
     if ($script:ConnectState -and $script:ConnectState.Phase -ne 'Idle') {
         Stop-ConnectTimers
     }
 
-    # 2. Close Word if running. WebView2 shuts down with Word, which
-    #    closes the debug port; inject.js keeps polling and flips to
-    #    DISCONNECTED within ~2 seconds.
-    $running = Get-Process -Name WINWORD -ErrorAction SilentlyContinue
-    if ($running) {
-        $running | ForEach-Object { $_.CloseMainWindow() | Out-Null }
+    # 2. Close every Office app we know about. WebView2 shuts down with
+    #    the host app, which closes the debug port; inject.js keeps
+    #    polling and flips DISCONNECTED within ~2 seconds.
+    $anyClosed = $false
+    foreach ($a in $Apps) {
+        $running = Get-Process -Name $a.ProcessName -ErrorAction SilentlyContinue
+        if ($running) {
+            $running | ForEach-Object { $_.CloseMainWindow() | Out-Null }
+            $anyClosed = $true
+        }
+    }
+    if ($anyClosed) {
         Start-Sleep -Milliseconds 800
         # Force-kill anything that refused to close gracefully.
-        Get-Process -Name WINWORD -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+        foreach ($a in $Apps) {
+            Get-Process -Name $a.ProcessName -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+        }
     }
 
-    # 3. If the injector is still alive after Word went down - or if Word
-    #    was never running and only the injector needed stopping - kill it
-    #    via its PID file. This handles the stuck state where a
-    #    Connect failed partway: injector was launched by word-wrapper but
-    #    Word itself never came up, leaving a live injector with no target.
+    # 3. If the injector is still alive after all apps went down - or if
+    #    no app was running and only the injector needed stopping - kill
+    #    it via its PID file. Handles the stuck state where a Connect
+    #    failed partway: injector was launched but the host app never
+    #    came up, leaving a live injector with no target.
     if (Test-Path $PidFile) {
         $pidLine = Get-Content -Path $PidFile -TotalCount 1 -ErrorAction SilentlyContinue
         $pidInt = if ($pidLine) { ("$pidLine").Trim() -as [int] } else { $null }
@@ -350,8 +442,18 @@ $miDisconnect.add_Click({
         }
         Remove-Item $PidFile -Force -ErrorAction SilentlyContinue
     }
-    if (Test-Path $LockFile)   { Remove-Item $LockFile -Force -ErrorAction SilentlyContinue }
+    if (Test-Path $LockFile) { Remove-Item $LockFile -Force -ErrorAction SilentlyContinue }
     Set-Content -Path $StatusFile -Value 'DISCONNECTED' -Encoding ASCII -ErrorAction SilentlyContinue
+    # Best-effort clear of the per-app status file too. The injector
+    # would normally rewrite this on its next tick, but since we just
+    # killed the injector we leave a clean slate for the tray's next read.
+    try {
+        $allOff = @{}
+        foreach ($a in $Apps) { $allOff[$a.Name] = 'DISCONNECTED' }
+        $tmp = $AppsStatusFile + '.tmp'
+        ($allOff | ConvertTo-Json -Compress) | Set-Content -Path $tmp -Encoding ASCII -ErrorAction SilentlyContinue
+        Move-Item -Path $tmp -Destination $AppsStatusFile -Force -ErrorAction SilentlyContinue
+    } catch { }
 }) | Out-Null
 
 $menu.Items.Add('-') | Out-Null  # separator
@@ -386,7 +488,7 @@ $script:miCheckUpdate.add_Click({
         if (-not (Test-Path $checkScript)) {
             [System.Windows.Forms.MessageBox]::Show(
                 "check-update.js was not found at:`n$checkScript",
-                'Claude for Word RTL - Check for updates',
+                'Claude for Office RTL - Check for updates',
                 [System.Windows.Forms.MessageBoxButtons]::OK,
                 [System.Windows.Forms.MessageBoxIcon]::Error
             ) | Out-Null
@@ -403,8 +505,8 @@ $script:miCheckUpdate.add_Click({
         if ($line -match '^\[UP TO DATE\]\s*Local version:\s*(\S+)') {
             $local = $matches[1]
             [System.Windows.Forms.MessageBox]::Show(
-                "Claude for Word RTL Fix is up to date (v$local).",
-                'Claude for Word RTL - Check for updates',
+                "Claude for Office RTL Fix is up to date (v$local).",
+                'Claude for Office RTL - Check for updates',
                 [System.Windows.Forms.MessageBoxButtons]::OK,
                 [System.Windows.Forms.MessageBoxIcon]::Information
             ) | Out-Null
@@ -426,7 +528,7 @@ $script:miCheckUpdate.add_Click({
                 "  3. Run install.bat again. It will stop the old tray`n" +
                 "     and injector, then start the new ones.`n`n" +
                 "Press OK to open the download page, or Cancel to skip.",
-                'Claude for Word RTL - Check for updates',
+                'Claude for Office RTL - Check for updates',
                 [System.Windows.Forms.MessageBoxButtons]::OKCancel,
                 [System.Windows.Forms.MessageBoxIcon]::Information
             )
@@ -447,7 +549,7 @@ $script:miCheckUpdate.add_Click({
                 "Could not check for updates.`n`n" +
                 $line.Trim() + "`n`n" +
                 "You can check manually at:`n$fallbackUrl",
-                'Claude for Word RTL - Check for updates',
+                'Claude for Office RTL - Check for updates',
                 [System.Windows.Forms.MessageBoxButtons]::OK,
                 [System.Windows.Forms.MessageBoxIcon]::Warning
             ) | Out-Null
@@ -456,7 +558,7 @@ $script:miCheckUpdate.add_Click({
     catch {
         [System.Windows.Forms.MessageBox]::Show(
             "Failed to run check-update.js:`n$($_.Exception.Message)",
-            'Claude for Word RTL - Check for updates',
+            'Claude for Office RTL - Check for updates',
             [System.Windows.Forms.MessageBoxButtons]::OK,
             [System.Windows.Forms.MessageBoxIcon]::Error
         ) | Out-Null
@@ -477,15 +579,15 @@ $miUninstall.add_Click({
     # when that happens, the hand-off is racy. Order: tray cleans up own
     # state, Start-Process detaches the cmd, then Application.Exit.
     $ans = [System.Windows.Forms.MessageBox]::Show(
-        "Uninstall Claude for Word RTL Fix?`n`n" +
+        "Uninstall Claude for Office RTL Fix?`n`n" +
         "This will:`n" +
         "  - Remove the Startup entry and the Apps and Features registration`n" +
         "  - Stop the tray and the injector`n" +
         "  - Clean node_modules and temp status files`n" +
         "  - Remove any legacy WebView2 env var written by older installs`n`n" +
-        "Word itself is not modified. The install folder stays in place -" +
-        " you can delete it manually afterward.",
-        'Claude for Word RTL - Uninstall',
+        "Word, Excel and PowerPoint themselves are not modified. The install" +
+        " folder stays in place - you can delete it manually afterward.",
+        'Claude for Office RTL - Uninstall',
         [System.Windows.Forms.MessageBoxButtons]::OKCancel,
         [System.Windows.Forms.MessageBoxIcon]::Warning
     )
@@ -495,7 +597,7 @@ $miUninstall.add_Click({
     if (-not (Test-Path $uninstall)) {
         [System.Windows.Forms.MessageBox]::Show(
             "uninstall.bat was not found next to the tray script. Cannot continue.",
-            'Claude for Word RTL - Uninstall',
+            'Claude for Office RTL - Uninstall',
             [System.Windows.Forms.MessageBoxButtons]::OK,
             [System.Windows.Forms.MessageBoxIcon]::Error
         ) | Out-Null
@@ -538,11 +640,63 @@ $miExit.add_Click({
 
 $tray.ContextMenuStrip = $menu
 
-# Poll the status file every 2s (matches injector's POLL_MS) and update icon.
-# Also detect a stale status: if the injector PID isn't alive AND the status
-# file is older than $StaleSeconds, treat the effective status as DISCONNECTED
-# regardless of what the file claims. This handles SIGKILL / crash cases where
-# the injector couldn't clean up its own status on the way out.
+# Read the per-app status JSON written by inject.js. Returns a hashtable
+# keyed by app name (Word, Excel, PowerPoint) with values 'CONNECTED',
+# 'DISCONNECTED', or 'ERROR:<code>'. Missing/parse-error file is treated
+# as all-DISCONNECTED so the tray degrades gracefully when the injector
+# has not started yet (or has just been killed).
+function Get-AppsStatus {
+    $result = @{}
+    foreach ($a in $Apps) { $result[$a.Name] = 'DISCONNECTED' }
+    if (-not (Test-Path $AppsStatusFile)) { return $result }
+    try {
+        $raw = Get-Content -Path $AppsStatusFile -Raw -ErrorAction Stop
+        if (-not $raw) { return $result }
+        $parsed = $raw | ConvertFrom-Json -ErrorAction Stop
+        foreach ($a in $Apps) {
+            $val = $parsed.($a.Name)
+            if ($val) { $result[$a.Name] = "$val" }
+        }
+    } catch {
+        # parse error - leave the all-DISCONNECTED default
+    }
+    return $result
+}
+
+# Translate one app's raw apps.json value + process-running fact into the
+# user-facing state string shown on the disabled status menu item.
+#   not running         - no host process exists at all
+#   connected           - process exists and apps.json says CONNECTED
+#   running without RTL - process exists and apps.json says DISCONNECTED
+#   error: <code>       - process exists and apps.json says ERROR:<code>
+# The "running without RTL" string is what tells the user that this Connect
+# button is the recovery path for a directly-launched (non-wrapper) Office app.
+function Get-EffectiveAppState($app, $appsStatus) {
+    $running = [bool](Get-Process -Name $app.ProcessName -ErrorAction SilentlyContinue)
+    if (-not $running) { return 'not running' }
+    $raw = $appsStatus[$app.Name]
+    if (-not $raw) { return 'running without RTL' }
+    if ($raw -eq 'CONNECTED') { return 'connected' }
+    if ($raw -like 'ERROR:*') {
+        $code = $raw.Substring(6)
+        return "error: $code"
+    }
+    return 'running without RTL'
+}
+
+# Poll the status file every 2s (matches injector's POLL_MS) and update
+# icon, tooltip, status labels, and per-item Enabled state.
+#
+# Aggregate icon color (unchanged from v0.1.x logic):
+#   green = at least one app connected
+#   red   = any error, or all disconnected with the injector having reported
+#   gray  = startup, before any state has been observed
+#
+# Status labels (3 disabled items at top of menu) are refreshed every tick
+# from apps.json + Get-Process. Connect items are enabled when their app
+# is closed OR running without RTL; disabled when connected or while a
+# Connect flow is in progress for ANY app. Disconnect-all is enabled when
+# any app is alive, the injector is alive, or a Connect flow is running.
 $script:lastStatus = ''
 $tickAction = {
     $raw = 'DISCONNECTED'
@@ -565,29 +719,28 @@ $tickAction = {
         if ($age.TotalSeconds -gt $StaleSeconds) { $effective = 'DISCONNECTED' }
     }
 
-    # Connect is available whenever we are NOT currently connected -
-    # either Word is down, or it is up but running without the debug flag
-    # (Connect will prompt and relaunch). It is also disabled while a
-    # Connect flow is mid-flight, to avoid re-entrance.
-    #
-    # Disconnect is available whenever there is ANY state to tear down:
-    # Word running, injector running, or a Connect flow in progress.
-    # Previously Disconnect keyed only on Word; if a Connect failed in a
-    # way that left the injector running but never launched Word, the
-    # user was stranded with Disconnect greyed out and no recovery path.
-    $wordRunning = [bool](Get-Process -Name WINWORD -ErrorAction SilentlyContinue)
+    # Per-app state for the status labels and Connect-item enablement.
+    $appsStatus = Get-AppsStatus
+    $perApp = @{}   # name -> effective state string
+    $anyAppRunning = $false
+    foreach ($a in $Apps) {
+        $state = Get-EffectiveAppState $a $appsStatus
+        $perApp[$a.Name] = $state
+        if ($state -ne 'not running') { $anyAppRunning = $true }
+        # Refresh the disabled status label in place.
+        $mi = $script:StatusItems[$a.Name]
+        if ($mi) { $mi.Text = "$($a.Name): $state" }
+    }
+
     $connectInProgress = ($script:ConnectState.Phase -ne 'Idle')
 
-    # Auto-launch the injector if Word is up but no injector is attached,
-    # and we are not already in the middle of a Connect. Recovery path
-    # for the case where the injector crashed while Word (started via
-    # Connect) stayed up. If Word was started directly without Connect,
-    # it has no debug surface and the relaunched injector just idles.
-    #
-    # We do NOT check the debug port here. inject.js polls it itself
-    # every 2s and attaches when WebView2 comes up; launching early
-    # just means it idles harmlessly until the Claude panel opens.
-    if ($wordRunning -and -not $injectorAlive -and -not $connectInProgress) {
+    # Auto-launch the injector if ANY of the three Office apps is up but
+    # no injector is attached, and we are not already in the middle of a
+    # Connect. Recovery path for the case where the injector crashed
+    # while an app (started via Connect) stayed up. If the app was
+    # started directly without Connect, it has no debug surface and the
+    # relaunched injector just idles harmlessly.
+    if ($anyAppRunning -and -not $injectorAlive -and -not $connectInProgress) {
         $nowMs = [Environment]::TickCount
         if (($nowMs - $script:AutoLaunchLastMs) -ge $script:AutoLaunchCooldownMs) {
             $autoLaunchVbs = Join-Path $InstallDir 'inject-hidden.vbs'
@@ -600,33 +753,51 @@ $tickAction = {
         }
     }
 
-    $miConnect.Enabled = (($effective -ne 'CONNECTED') -and (-not $connectInProgress))
-    $miDisconnect.Enabled = ($wordRunning -or $injectorAlive -or $connectInProgress)
+    # Connect items: enabled only when the target app is NOT connected
+    # AND no Connect flow is currently in flight (for any app). Same
+    # gating as v0.1.x but applied per-app instead of just to Word.
+    foreach ($a in $Apps) {
+        $mi = $script:ConnectItems[$a.Name]
+        if (-not $mi) { continue }
+        $state = $perApp[$a.Name]
+        $mi.Enabled = (($state -ne 'connected') -and (-not $connectInProgress))
+    }
+    # Disconnect-all: enabled when there is ANY state to tear down.
+    $miDisconnectAll.Enabled = ($anyAppRunning -or $injectorAlive -or $connectInProgress)
 
-    if ($effective -eq $script:lastStatus) { return }
-    $script:lastStatus = $effective
+    # Aggregate icon + tooltip. We compute a signature so we only repaint
+    # when something actually changed, since GDI handle churn is the
+    # historical source of icon-leak bugs in this script.
+    $connectedCount = 0
+    foreach ($k in $perApp.Keys) { if ($perApp[$k] -eq 'connected') { $connectedCount++ } }
+    $errorState = ($effective -like 'ERROR:*')
+    $totalApps = $Apps.Count
 
-    if ($effective -eq 'CONNECTED') {
+    $sig = "$effective|$connectedCount|$totalApps|$errorState"
+    if ($sig -eq $script:lastStatus) { return }
+    $script:lastStatus = $sig
+
+    if ($connectedCount -gt 0 -and -not $errorState) {
         $tray.Icon = $iconGreen
-        $tray.Text = 'Claude for Word RTL - connected'
-    } elseif ($effective -like 'ERROR:*') {
+        $tray.Text = "Claude for Office RTL - connected ($connectedCount of $totalApps)"
+    } elseif ($errorState) {
         $tray.Icon = $iconRed
         $code = $effective.Substring(6)
         # Human-friendly tooltip mapping. Fall back to the raw code when
         # we have no explicit mapping, so future error codes still render.
         switch ($code) {
             'port-9222-taken-by-other-app' {
-                $tray.Text = 'Claude for Word RTL - port 9222 used by another app. Run doctor.bat.'
+                $tray.Text = 'Claude for Office RTL - port 9222 used by another app. Run doctor.bat.'
             }
             default {
                 $msg = $code
                 if ($msg.Length -gt 55) { $msg = $msg.Substring(0, 55) + '...' }
-                $tray.Text = "Claude for Word RTL - error: $msg"
+                $tray.Text = "Claude for Office RTL - error: $msg"
             }
         }
     } else {
         $tray.Icon = $iconRed
-        $tray.Text = 'Claude for Word RTL - disconnected'
+        $tray.Text = 'Claude for Office RTL - disconnected'
     }
 }
 $timer = New-Object System.Windows.Forms.Timer
