@@ -12,8 +12,8 @@ Client-side RTL fix for Claude's Microsoft Word add-in. A small Node.js injector
 
 Top-level files (install folder root):
 
-- `install.bat` - per-user installer. Checks Node, installs npm deps, creates Startup-folder shortcut, writes `HKCU\...\Uninstall\ClaudeWordRTL`, prompts for Auto-enable, stops any old tray/injector via PID files, then launches the new tray.
-- `uninstall.bat` - 4-step uninstaller: stop tray and injector, remove Startup entry + Apps and Features key, clear Auto-enable env var only if its value matches our exact string, prune `node_modules` and temp status files.
+- `install.bat` - per-user installer. Checks Node, installs npm deps, creates Startup-folder shortcut, writes `HKCU\...\Uninstall\ClaudeWordRTL`, silently removes any legacy Auto-enable env var written by v0.1.0 - v0.1.3, stops any old tray/injector via PID files, then launches the new tray. As of v0.1.4 the installer no longer prompts the user for anything.
+- `uninstall.bat` - 4-step uninstaller: stop tray and injector, remove Startup entry + Apps and Features key, clear any legacy Auto-enable env var (only when its value matches one of our known strings; user-modified values are preserved), prune `node_modules` and temp status files.
 - `doctor.bat` - 12-check diagnostic (Node, npm, deps, Word install, Word running, port 9222, injector PID, Startup entry, tray PID, WebView2, Office version, Apps and Features key). Writes `doctor.log` next to itself.
 - `check-update.bat` - thin wrapper that runs `node scripts/check-update.js` and prints the result. Used by the tray menu and manually from cmd.
 - `cleanup.bat` - recovery helper. Kills our current injector via PID file, then scans for orphan `node.exe` processes whose command line contains `inject.js` and stops only those. Also kills tray `powershell.exe` processes whose command line mentions `tray-icon.ps1`.
@@ -26,7 +26,7 @@ Top-level files (install folder root):
 Files under `scripts/`:
 
 - `scripts/inject.js` - the Node injector. Connects to CDP on `localhost:9222`, finds the Claude panel target by URL, injects `<style>` + MutationObserver via `Runtime.evaluate`, re-injects every 2s (`POLL_MS`). Writes PID to `%TEMP%\claude-word-rtl.pid` and one-line status (`CONNECTED` / `DISCONNECTED` / `ERROR:<msg>`) to `%TEMP%\claude-word-rtl.status`. Truncates `%TEMP%\claude-word-rtl.log` on each start. Target URL patterns: `URL_PATTERN_PRIMARY` (pivot.claude.ai) and `URL_PATTERN_FALLBACK` (any `*.claude.ai`) at lines 68-69.
-- `scripts/tray-icon.ps1` - PowerShell tray icon host. Singleton via named mutex. Polls `claude-word-rtl.status` every 2s, updates icon color (gray starting, red disconnected, green connected). Implements Connect state machine on a `Timer`, Disconnect cleanup, Auto-enable toggle (writes/removes `HKCU\Environment\WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`), Show diagnostic log, Check for updates dialog, Uninstall launcher, Exit. Staleness detection around lines 680-700: if PID is not alive AND status file is older than `$StaleSeconds`, the effective status is forced to `DISCONNECTED` so the icon does not lie when the injector crashed.
+- `scripts/tray-icon.ps1` - PowerShell tray icon host. Singleton via named mutex. Polls `claude-word-rtl.status` every 2s, updates icon color (gray starting, red disconnected, green connected). Implements Connect state machine on a `Timer`, Disconnect cleanup, Show diagnostic log, Check for updates dialog, Uninstall launcher, Exit. Auto-enable toggle was removed in v0.1.4 (security: persistent env var was an EDR trigger). Staleness detection: if PID is not alive AND status file is older than `$StaleSeconds`, the effective status is forced to `DISCONNECTED` so the icon does not lie when the injector crashed.
 - `scripts/check-update.js` - fetches `https://api.github.com/repos/asaf-aizone/Claude-for-word-RTL-fix/releases/latest` via Node's built-in `https` module. Compares `tag_name` to the local `package.json` version numerically. Zero npm dependencies. 5s timeout.
 - `scripts/create-shortcut.ps1` - called by `install.bat` to create the Startup-folder `.lnk` that points at `start-tray.vbs`.
 - `scripts/start-tray.vbs` - hidden launcher for `tray-icon.ps1`. The Startup-folder shortcut points here.
@@ -55,12 +55,25 @@ End-to-end execution flow when a user right-clicks the tray and picks Connect:
 9. 5s after each inject, the injector runs a DOM validation pass. If `direction: rtl` did not apply or known Claude-panel selectors no longer match, it writes `ERROR:dom-not-matched-after-inject` and logs a `[WARN]`. The tray turns red on that ERROR.
 10. The tray's 2s tick reads the status file, cross-checks the injector PID is alive, and updates the icon. If PID is dead and the status file is stale (`$StaleSeconds`), the effective status is forced to `DISCONNECTED` regardless of what the file claims - guard against SIGKILLed injectors leaving stale `CONNECTED` behind.
 
-Auto-enable flow:
+Auto-enable removal in v0.1.4:
 
-- User toggles the Auto-enable checkbox in the tray menu.
-- ON: tray writes `HKCU\Environment\WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222` and broadcasts `WM_SETTINGCHANGE` so new processes pick it up without a logout. Every future WebView2 host under this user reads the variable at process start, including Word. Result: launching Word normally (taskbar, Recent files, double-click `.docx`, email attachment) starts it with the CDP port already open.
-- OFF: tray deletes the registry value only if the current value exactly equals `--remote-debugging-port=9222`. A user-modified value is preserved.
-- The tray also auto-launches the injector when it notices Word is running without a live injector. 30s cooldown, so a missing-Node or crash-on-startup condition does not spin forever. Covers both the Auto-enable path (Word started without the wrapper) and the recovery path (injector died while Word stayed up).
+- v0.1.0 - v0.1.3 had an "Auto-enable" tray checkbox that wrote
+  `HKCU\Environment\WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222`
+  so every Word launch had RTL ready without clicking Connect. That variable is
+  read by every WebView2 host on the account (Teams, Outlook, Edge WebView,
+  OneDrive UI), and enterprise EDR products (Microsoft Defender for Endpoint,
+  CrowdStrike, SentinelOne) flagged the modification as a credential-theft
+  signal. After a field incident with EDR-driven host isolation, v0.1.4
+  removed Auto-enable entirely. The tray no longer has the checkbox, the
+  installer no longer prompts, and the env var is never written. Activation
+  is Connect-only: user clicks Connect from the tray, `word-wrapper.bat` sets
+  the WebView2 debug flag in its own process scope, Word inherits it.
+- The tray still auto-launches the injector when it notices Word is running
+  without a live injector. 30s cooldown so a missing-Node or crash-on-startup
+  condition does not spin forever. Covers the recovery path (injector died
+  while Word stayed up after Connect).
+- A reinstall over v0.1.0 - v0.1.3 silently removes the legacy env var if
+  its value matches our known string. User-modified values are preserved.
 
 Status file contract (`%TEMP%\claude-word-rtl.status`):
 
@@ -85,7 +98,7 @@ Install:
 install.bat
 ```
 
-Run the installer by double-clicking `install.bat` (or from cmd in the install folder). No admin rights. Prompts for Auto-enable at the end.
+Run the installer by double-clicking `install.bat` (or from cmd in the install folder). No admin rights. Runs 4 steps with no prompts. As of v0.1.4, the installer also silently removes any legacy Auto-enable env var written by v0.1.0 - v0.1.3.
 
 Uninstall:
 
@@ -144,7 +157,7 @@ Every file and registry key the tool creates or reads:
 - `%TEMP%\claude-word-rtl.log` - rolling diagnostic log from the injector. Truncated at each injector start.
 - `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\Claude for Word RTL Tray.lnk` - Startup-folder shortcut pointing at `scripts\start-tray.vbs`. Created by `install.bat`, removed by `uninstall.bat`. User can delete manually via `shell:startup`.
 - `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeWordRTL` - Apps and Features registration so the tool appears in Windows Settings > Apps > Installed apps. Values: `DisplayName`, `DisplayVersion`, `Publisher`, `InstallLocation`, `UninstallString`, `DisplayIcon`, `URLInfoAbout`, `NoModify`, `NoRepair`. Written on install, removed on uninstall.
-- `HKCU\Environment\WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` - set to `--remote-debugging-port=9222` only when Auto-enable is ON. Cleared on toggle-off or uninstall, but only when the current value exactly matches our string (user-modified values are preserved). Read by every WebView2 host under this user at process start.
+- `HKCU\Environment\WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` - **NOT written by v0.1.4 or later**. v0.1.0 - v0.1.3 wrote this when Auto-enable was on; v0.1.4 install.bat and uninstall.bat both clear it (only when its value matches a known legacy string; user-modified values are preserved). v0.1.4 sets the WebView2 debug flag per-process via `word-wrapper.bat` instead, so other WebView2 hosts on the account are never affected.
 - CDP target the injector looks for: `pivot.claude.ai` (primary URL pattern) or any `*.claude.ai` (fallback). See `scripts/inject.js` lines 68-69.
 
 ## Platform - Windows only
@@ -184,7 +197,7 @@ If the user says the tray is **red and stays red even after clicking "Connect"**
 ## What NOT to do
 
 - Do not modify Office.js or Word templates. This tool does not touch them.
-- Do not run `uninstall.bat` to "fix" a broken install unless the user explicitly asks to uninstall - it clears Auto-enable, Apps and Features registration, and `node_modules`. Reinstalling over the top via `install.bat` is almost always the right recovery path.
+- Do not run `uninstall.bat` to "fix" a broken install unless the user explicitly asks to uninstall - it clears the legacy Auto-enable env var, Apps and Features registration, and `node_modules`. Reinstalling over the top via `install.bat` is almost always the right recovery path.
 - Do not recommend setting the debug port flag on Edge/Chrome/Teams directly - the flag is for Word's WebView2 only.
 - Do not suggest the user disable Word's add-in security, SmartScreen, or Defender. The tool does not require that.
 - Do not help the user force-push to `main` or rewrite history. Contributions come via PRs.

@@ -17,11 +17,20 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const portDiscovery = require('./port-discovery');
+const officeApps = require('../lib/office-apps');
 
 const TEMP_DIR = process.env.TEMP || process.env.TMP || '.';
-// Status file polled by the tray icon PowerShell script. One-line ASCII.
-// Values: CONNECTED | DISCONNECTED | ERROR:<message>
+// Aggregate status file polled by the tray icon PowerShell script for icon
+// color. One-line ASCII. Values: CONNECTED | DISCONNECTED | ERROR:<message>.
+// "Aggregate" because it reflects the overall injector state, not per-app.
+// The per-app states are written to APPS_STATUS_FILE below for the tray's
+// per-app status labels.
 const STATUS_FILE = path.join(TEMP_DIR, 'claude-word-rtl.status');
+// Per-app status file (v0.2.0+). One JSON object keyed by app name with
+// values CONNECTED | DISCONNECTED. The tray reads this each tick to render
+// per-app labels (Word: connected, Excel: not running, etc). Aggregate
+// status (above) is still the icon-color source of truth.
+const APPS_STATUS_FILE = path.join(TEMP_DIR, 'claude-office-rtl.apps.json');
 // PID file so cleanup scripts can target THIS injector specifically
 // instead of killing every node.exe on the machine.
 const PID_FILE = path.join(TEMP_DIR, 'claude-word-rtl.pid');
@@ -50,11 +59,46 @@ function writePidFile() {
 function removePidFile() {
   try { fs.unlinkSync(PID_FILE); } catch (e) { /* best-effort */ }
 }
+// Per-app status writer. Builds {Word: ..., Excel: ..., PowerPoint: ...}
+// from the current attach map. Called from tick() after target reconcile,
+// and during shutdown to leave a clean DISCONNECTED record on disk.
+function writeAppsStatus(connectedAppNames) {
+  var state = {};
+  for (var i = 0; i < officeApps.APPS.length; i++) {
+    var name = officeApps.APPS[i].name;
+    state[name] = connectedAppNames.has(name) ? 'CONNECTED' : 'DISCONNECTED';
+  }
+  // Atomic write: write to a temp sibling and rename. Avoids the tray
+  // (PowerShell, polling every 2s) reading a half-written JSON object.
+  try {
+    var tmp = APPS_STATUS_FILE + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(state) + '\n');
+    fs.renameSync(tmp, APPS_STATUS_FILE);
+  } catch (e) { /* best-effort */ }
+}
+function writeAppsAllDisconnected() {
+  writeAppsStatus(new Set());
+}
 writePidFile();
 writeStatus('DISCONNECTED');
-process.on('exit', function () { writeStatus('DISCONNECTED'); removePidFile(); });
-process.on('SIGINT', function () { writeStatus('DISCONNECTED'); removePidFile(); process.exit(0); });
-process.on('SIGTERM', function () { writeStatus('DISCONNECTED'); removePidFile(); process.exit(0); });
+writeAppsAllDisconnected();
+process.on('exit', function () {
+  writeStatus('DISCONNECTED');
+  writeAppsAllDisconnected();
+  removePidFile();
+});
+process.on('SIGINT', function () {
+  writeStatus('DISCONNECTED');
+  writeAppsAllDisconnected();
+  removePidFile();
+  process.exit(0);
+});
+process.on('SIGTERM', function () {
+  writeStatus('DISCONNECTED');
+  writeAppsAllDisconnected();
+  removePidFile();
+  process.exit(0);
+});
 
 // One-shot flag: emit the "DOM doesn't match" warning at most once per
 // process lifetime so re-injects on every 2s tick don't spam the terminal.
@@ -251,6 +295,7 @@ async function attach(target, app, port) {
     var result = await Runtime.evaluate({ expression: INJECTOR_SCRIPT, returnByValue: true });
     log('Attached & injected: [' + appName + '] port=' + port + ' url=' + target.url + ' -> ' + (result.result && result.result.value));
     writeStatus('CONNECTED');
+    refreshAppsStatus();
 
     // Delayed validation: give the page 5s to settle (SPA hydration, async
     // chunks) before we declare the DOM "doesn't match".
@@ -269,13 +314,31 @@ async function attach(target, app, port) {
       log('Detached: [' + appName + '] port=' + port + ' url=' + target.url);
       attached.delete(target.id);
       if (attached.size === 0) writeStatus('DISCONNECTED');
+      refreshAppsStatus();
     });
 
+    // Track the app name on the client so refreshAppsStatus can derive
+    // per-app state from the attach map without re-running discovery.
+    client.__appName = appName;
     attached.set(target.id, client);
   } catch (err) {
     log('Attach failed for [' + appName + '] port=' + port + ' url=' + target.url + ': ' + err.message);
     fileLog('attach error stack: ' + (err && err.stack ? err.stack : '(no stack)'));
   }
+}
+
+// Walk the attach map, collect the app names of currently-attached targets,
+// and write the per-app status file. Called whenever the set of attached
+// targets changes (after attach success, after disconnect, after tick
+// reconciles dropped targets).
+function refreshAppsStatus() {
+  var connected = new Set();
+  for (var client of attached.values()) {
+    if (client && client.__appName && client.__appName !== 'unknown') {
+      connected.add(client.__appName);
+    }
+  }
+  writeAppsStatus(connected);
 }
 
 // Tick counter + last-logged signatures so we can log state transitions
@@ -308,9 +371,17 @@ async function tick() {
   // Drop attached entries whose target id is no longer present in the
   // current discovery results (page closed, Office app exited, etc).
   var aliveIds = new Set(results.map(function (r) { return r.target.id; }));
+  var droppedAny = false;
   for (var id of Array.from(attached.keys())) {
-    if (!aliveIds.has(id)) attached.delete(id);
+    if (!aliveIds.has(id)) {
+      attached.delete(id);
+      droppedAny = true;
+    }
   }
+  // If any target was reaped here (disconnect handler may not have fired
+  // for app-exit cases where CDP closes abruptly), refresh the per-app
+  // status so the tray sees the change within one tick.
+  if (droppedAny) refreshAppsStatus();
   var sig = 'matched=' + results.length +
     ' entries=[' + results.map(function (r) {
       return (r.app ? r.app.name : 'unknown') + '@' + r.port + ' ' + r.target.url;
