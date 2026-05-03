@@ -16,12 +16,21 @@ const CDP = require('chrome-remote-interface');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const portDiscovery = require('./port-discovery');
+const officeApps = require('../lib/office-apps');
 
-const PORT = 9222;
 const TEMP_DIR = process.env.TEMP || process.env.TMP || '.';
-// Status file polled by the tray icon PowerShell script. One-line ASCII.
-// Values: CONNECTED | DISCONNECTED | ERROR:<message>
+// Aggregate status file polled by the tray icon PowerShell script for icon
+// color. One-line ASCII. Values: CONNECTED | DISCONNECTED | ERROR:<message>.
+// "Aggregate" because it reflects the overall injector state, not per-app.
+// The per-app states are written to APPS_STATUS_FILE below for the tray's
+// per-app status labels.
 const STATUS_FILE = path.join(TEMP_DIR, 'claude-word-rtl.status');
+// Per-app status file (v0.2.0+). One JSON object keyed by app name with
+// values CONNECTED | DISCONNECTED. The tray reads this each tick to render
+// per-app labels (Word: connected, Excel: not running, etc). Aggregate
+// status (above) is still the icon-color source of truth.
+const APPS_STATUS_FILE = path.join(TEMP_DIR, 'claude-office-rtl.apps.json');
 // PID file so cleanup scripts can target THIS injector specifically
 // instead of killing every node.exe on the machine.
 const PID_FILE = path.join(TEMP_DIR, 'claude-word-rtl.pid');
@@ -50,11 +59,46 @@ function writePidFile() {
 function removePidFile() {
   try { fs.unlinkSync(PID_FILE); } catch (e) { /* best-effort */ }
 }
+// Per-app status writer. Builds {Word: ..., Excel: ..., PowerPoint: ...}
+// from the current attach map. Called from tick() after target reconcile,
+// and during shutdown to leave a clean DISCONNECTED record on disk.
+function writeAppsStatus(connectedAppNames) {
+  var state = {};
+  for (var i = 0; i < officeApps.APPS.length; i++) {
+    var name = officeApps.APPS[i].name;
+    state[name] = connectedAppNames.has(name) ? 'CONNECTED' : 'DISCONNECTED';
+  }
+  // Atomic write: write to a temp sibling and rename. Avoids the tray
+  // (PowerShell, polling every 2s) reading a half-written JSON object.
+  try {
+    var tmp = APPS_STATUS_FILE + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(state) + '\n');
+    fs.renameSync(tmp, APPS_STATUS_FILE);
+  } catch (e) { /* best-effort */ }
+}
+function writeAppsAllDisconnected() {
+  writeAppsStatus(new Set());
+}
 writePidFile();
 writeStatus('DISCONNECTED');
-process.on('exit', function () { writeStatus('DISCONNECTED'); removePidFile(); });
-process.on('SIGINT', function () { writeStatus('DISCONNECTED'); removePidFile(); process.exit(0); });
-process.on('SIGTERM', function () { writeStatus('DISCONNECTED'); removePidFile(); process.exit(0); });
+writeAppsAllDisconnected();
+process.on('exit', function () {
+  writeStatus('DISCONNECTED');
+  writeAppsAllDisconnected();
+  removePidFile();
+});
+process.on('SIGINT', function () {
+  writeStatus('DISCONNECTED');
+  writeAppsAllDisconnected();
+  removePidFile();
+  process.exit(0);
+});
+process.on('SIGTERM', function () {
+  writeStatus('DISCONNECTED');
+  writeAppsAllDisconnected();
+  removePidFile();
+  process.exit(0);
+});
 
 // One-shot flag: emit the "DOM doesn't match" warning at most once per
 // process lifetime so re-injects on every 2s tick don't spam the terminal.
@@ -197,18 +241,6 @@ function log() {
   try { fileLog(args.map(function (a) { return typeof a === 'string' ? a : JSON.stringify(a); }).join(' ')); } catch (e) {}
 }
 
-function listTargets() {
-  return new Promise(function (resolve, reject) {
-    http.get('http://localhost:' + PORT + '/json/list', function (res) {
-      var body = '';
-      res.on('data', function (c) { body += c; });
-      res.on('end', function () {
-        try { resolve(JSON.parse(body)); } catch (e) { reject(e); }
-      });
-    }).on('error', reject);
-  });
-}
-
 // Runs inside the page context. Returns an object describing which of our
 // expected invariants hold after the CSS has been injected. The injector
 // sets <html dir style> via the RTL_CSS rule on `html, body`, so we check
@@ -251,8 +283,9 @@ async function validateInjection(Runtime, url) {
   } catch (e) { /* ignore - next tick will retry */ }
 }
 
-async function attach(target) {
+async function attach(target, app, port) {
   if (attached.has(target.id)) return;
+  var appName = app ? app.name : 'unknown';
   try {
     var client = await CDP({ target: target.webSocketDebuggerUrl });
     var Page = client.Page, Runtime = client.Runtime;
@@ -260,8 +293,9 @@ async function attach(target) {
     await Runtime.enable();
     await Page.addScriptToEvaluateOnNewDocument({ source: INJECTOR_SCRIPT });
     var result = await Runtime.evaluate({ expression: INJECTOR_SCRIPT, returnByValue: true });
-    log('Attached & injected: ' + target.url + ' -> ' + (result.result && result.result.value));
+    log('Attached & injected: [' + appName + '] port=' + port + ' url=' + target.url + ' -> ' + (result.result && result.result.value));
     writeStatus('CONNECTED');
+    refreshAppsStatus();
 
     // Delayed validation: give the page 5s to settle (SPA hydration, async
     // chunks) before we declare the DOM "doesn't match".
@@ -277,106 +311,94 @@ async function attach(target) {
     });
 
     client.on('disconnect', function () {
-      log('Detached: ' + target.url);
+      log('Detached: [' + appName + '] port=' + port + ' url=' + target.url);
       attached.delete(target.id);
       if (attached.size === 0) writeStatus('DISCONNECTED');
+      refreshAppsStatus();
     });
 
+    // Track the app name on the client so refreshAppsStatus can derive
+    // per-app state from the attach map without re-running discovery.
+    client.__appName = appName;
     attached.set(target.id, client);
   } catch (err) {
-    log('Attach failed for ' + target.url + ': ' + err.message);
+    log('Attach failed for [' + appName + '] port=' + port + ' url=' + target.url + ': ' + err.message);
     fileLog('attach error stack: ' + (err && err.stack ? err.stack : '(no stack)'));
   }
 }
 
+// Walk the attach map, collect the app names of currently-attached targets,
+// and write the per-app status file. Called whenever the set of attached
+// targets changes (after attach success, after disconnect, after tick
+// reconciles dropped targets).
+function refreshAppsStatus() {
+  var connected = new Set();
+  for (var client of attached.values()) {
+    if (client && client.__appName && client.__appName !== 'unknown') {
+      connected.add(client.__appName);
+    }
+  }
+  writeAppsStatus(connected);
+}
+
 // Tick counter + last-logged signatures so we can log state transitions
-// without spamming the file every 2s. We log: every listTargets error, the
+// without spamming the file every 2s. We log: every discovery error, the
 // first successful tick, and any change in the set of matched targets.
 var tickCount = 0;
 var lastTargetsSig = null;
 var lastListErrorMsg = null;
-// Count consecutive ticks where CDP answered with targets but none matched
-// our Claude URL patterns. Used to detect a non-Word app squatting on
-// port 9222 (Edge, another WebView2 host, Electron app, Google Drive File
-// Stream, etc). 3 ticks = 6s at POLL_MS=2000, which clears Word's own
-// WebView2 startup window where the Claude panel may not be advertised yet.
-var portTakenTickStreak = 0;
-var PORT_TAKEN_TICK_THRESHOLD = 3;
-var portTakenReported = false;
+// v0.2.0: removed port-9222-squat detection - dynamic ports avoid the squat
+// pathology entirely. Each Office app gets its own ephemeral port via
+// --remote-debugging-port=0, so a non-Office CDP app on a fixed port no
+// longer interferes with discovery.
 async function tick() {
   tickCount++;
-  var targets;
+  var results;
   try {
-    targets = await listTargets();
+    results = await portDiscovery.discoverActiveTargets();
     if (lastListErrorMsg) {
-      fileLog('listTargets recovered after error: ' + lastListErrorMsg);
+      fileLog('discoverActiveTargets recovered after error: ' + lastListErrorMsg);
       lastListErrorMsg = null;
     }
   } catch (e) {
     var msg = e && e.message ? e.message : String(e);
     if (msg !== lastListErrorMsg) {
-      fileLog('listTargets failed (tick ' + tickCount + '): ' + msg);
+      fileLog('discoverActiveTargets failed (tick ' + tickCount + '): ' + msg);
       lastListErrorMsg = msg;
     }
     return;
   }
-  var aliveIds = new Set(targets.map(function (t) { return t.id; }));
+  // Drop attached entries whose target id is no longer present in the
+  // current discovery results (page closed, Office app exited, etc).
+  var aliveIds = new Set(results.map(function (r) { return r.target.id; }));
+  var droppedAny = false;
   for (var id of Array.from(attached.keys())) {
-    if (!aliveIds.has(id)) attached.delete(id);
+    if (!aliveIds.has(id)) {
+      attached.delete(id);
+      droppedAny = true;
+    }
   }
-  var pageTargets = targets.filter(function (t) { return t.type === 'page'; });
-  var primaryMatches = pageTargets.filter(function (t) { return URL_PATTERN_PRIMARY.test(t.url || ''); });
-  var matches = primaryMatches.length > 0
-    ? primaryMatches
-    : pageTargets.filter(function (t) { return URL_PATTERN_FALLBACK.test(t.url || ''); });
-  var sig = 'total=' + targets.length + ' pages=' + pageTargets.length +
-    ' matched=' + matches.length +
-    ' urls=[' + pageTargets.map(function (t) { return t.url; }).join(' | ') + ']';
+  // If any target was reaped here (disconnect handler may not have fired
+  // for app-exit cases where CDP closes abruptly), refresh the per-app
+  // status so the tray sees the change within one tick.
+  if (droppedAny) refreshAppsStatus();
+  var sig = 'matched=' + results.length +
+    ' entries=[' + results.map(function (r) {
+      return (r.app ? r.app.name : 'unknown') + '@' + r.port + ' ' + r.target.url;
+    }).join(' | ') + ']';
   if (sig !== lastTargetsSig) {
     fileLog('targets (tick ' + tickCount + '): ' + sig);
     lastTargetsSig = sig;
   }
 
-  // Port-9222-taken detection: CDP answered with targets but none of them
-  // match the Claude URL patterns. Some other CDP-capable app is on the
-  // port and Word's WebView2 is not. Require a short streak so Word's own
-  // WebView2 startup (where the Claude panel hasn't been advertised yet)
-  // doesn't trigger a false ERROR on the first tick.
-  if (targets.length > 0 && matches.length === 0) {
-    portTakenTickStreak++;
-    if (portTakenTickStreak >= PORT_TAKEN_TICK_THRESHOLD && !portTakenReported) {
-      portTakenReported = true;
-      var sampleUrls = pageTargets.map(function (t) {
-        var u = t.url || '(no url)';
-        return u.length > 80 ? u.substring(0, 80) + '...' : u;
-      });
-      fileLog('port 9222 appears taken by non-Word CDP app after ' +
-        portTakenTickStreak + ' ticks. Non-matching targets: [' +
-        sampleUrls.join(' | ') + ']');
-      writeStatus('ERROR:port-9222-taken-by-other-app');
-    }
-  } else {
-    // Clearing condition: either matches appeared (Word's Claude panel is
-    // up) or targets.length is zero (different problem category, the
-    // listTargets error path handles that). Reset streak + release the
-    // sticky error flag if we set it previously, so attach() can write
-    // CONNECTED again.
-    if (portTakenReported && matches.length > 0) {
-      fileLog('port-9222-taken-by-other-app cleared: Claude target appeared');
-      inErrorState = false;
-    }
-    portTakenTickStreak = 0;
-    portTakenReported = false;
-  }
-
-  for (var i = 0; i < matches.length; i++) {
-    var t = matches[i];
-    if (attached.has(t.id)) continue;
-    await attach(t);
+  for (var i = 0; i < results.length; i++) {
+    var r = results[i];
+    if (attached.has(r.target.id)) continue;
+    await attach(r.target, r.app, r.port);
   }
 }
 
-log('Claude RTL injector starting. Watching localhost:' + PORT);
+log('Claude RTL injector starting. Discovering active Office WebView2 ports.');
 log('Match pattern (primary):', URL_PATTERN_PRIMARY);
 log('Match pattern (fallback):', URL_PATTERN_FALLBACK);
 log('Ctrl+C to stop.');

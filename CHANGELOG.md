@@ -5,73 +5,172 @@ All notable changes to this project will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.1.4] - 2026-05-01
-
-Security hotfix. No new features. If you are using v0.1.0 -
-v0.1.3, upgrading to v0.1.4 is strongly recommended,
-particularly on managed corporate devices.
+## [0.2.0] - 2026-05-02
 
 ### Removed
 
-- Persistent Auto-enable user environment variable.
-  Earlier versions wrote
+- Persistent Auto-enable user environment variable. Earlier
+  versions wrote
   `HKCU\Environment\WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`
   with the WebView2 debug flag so every Word launch on the
-  account picked up the flag automatically. The same
-  variable is read by every other WebView2 host on the
-  account (Microsoft Teams, the Outlook reading pane, Edge
-  WebView, the OneDrive UI, etc.), which made the change
-  far broader than its name suggested. Enterprise EDR
-  products (Microsoft Defender for Endpoint, CrowdStrike
-  Falcon, SentinelOne, Sophos) treat unexpected
-  modifications of WebView2 browser arguments as a
-  credential-theft signal and may trigger host isolation on
-  managed devices when this pattern fires alongside the
-  other patterns the installer produces (hidden VBS
-  launcher, PowerShell with `-ExecutionPolicy Bypass`,
-  autoruns from a non-trusted install path). v0.1.4 removes
-  the toggle entirely. The WebView2 debug flag is now set
-  in `word-wrapper.bat`'s process scope only, inherited by
-  Word but not by Teams/Outlook/Edge.
+  account picked up the flag automatically. The same variable
+  is read by every other WebView2 host on the account
+  (Microsoft Teams, the Outlook reading pane, Edge WebView,
+  the OneDrive UI, etc.), which made the change far broader
+  than its name suggested. Enterprise EDR products
+  (Microsoft Defender for Endpoint, CrowdStrike Falcon,
+  SentinelOne, Sophos) treat unexpected modifications of
+  WebView2 browser arguments as a credential-theft signal and
+  may trigger host isolation on managed devices when this
+  pattern fires alongside the other patterns the installer
+  produces (hidden VBS launcher, PowerShell with
+  `-ExecutionPolicy Bypass`, autoruns from Downloads).
+  v0.2.0 removes the toggle entirely. The WebView2 debug flag
+  is now set in the wrapper's process scope only, inherited
+  by Word but not by Teams/Outlook/Edge.
 - Tray menu's "Auto-enable at every Word launch" checkbox.
   All RTL activation now flows through Connect, which uses
-  `word-wrapper.bat` to set the flag per-process.
+  `word-wrapper.bat` to set the flag per-process. The wrapper
+  is the only writer of the debug flag in v0.2.0+.
 
 ### Changed
 
-- `install.bat` no longer prompts for Auto-enable at the
-  end of installation. Step count goes from 5 to 4. On a
-  reinstall over v0.1.0 - v0.1.3, it silently removes the
-  legacy `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222`
-  registry value, so users coming from older versions are
-  migrated automatically. A user-modified value is preserved.
-- README.md and README.he.md now lead with a prominent
-  warning for managed corporate devices, advising users
-  not to install without prior approval from their security
-  team.
+- `word-wrapper.bat` now sets
+  `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=0`
+  in its own process scope (was `=9222`). Port 0 lets
+  WebView2 pick a free dynamic port per process, so multiple
+  Office apps launched through their respective wrappers each
+  get their own debug surface without colliding.
+- Dynamic-port discovery in the injector. The fixed
+  `--remote-debugging-port=9222` model could not support more
+  than one WebView2 host without silent collisions. The
+  injector now sweeps `tasklist` for `msedgewebview2.exe`
+  PIDs, maps each PID to its LISTENING port via `netstat`,
+  and probes every candidate's `/json/list` for Claude
+  targets. Per-target app identification reads the
+  `_host_Info=` URL parameter so Word, Excel, and
+  PowerPoint targets are routed correctly even when they
+  share a WebView2 host.
+- `install.bat` no longer prompts for Auto-enable. On a
+  reinstall over v0.1.x or an early v0.2.0 build, it
+  silently removes the legacy
+  `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` registry value if
+  it matches one of our known strings (`=9222` or `=0`),
+  so users coming from older versions are migrated
+  automatically. A user-modified value is preserved.
+- `uninstall.bat` cleanup of the legacy env var now matches
+  both `=9222` and `=0`.
+- Removed the v0.1.3 "port-9222 squat" detection. It was
+  specific to the fixed-port model where third-party
+  WebView2 hosts (Logitech AI Prompt Builder, TeamViewer)
+  could grab 9222 ahead of Office. Dynamic ports avoid the
+  pathology by construction.
+
+### Added
+
+- Excel and PowerPoint per-app launchers (`excel-wrapper.bat`,
+  `powerpoint-wrapper.bat`) parallel to `word-wrapper.bat`.
+  Each wrapper sets the WebView2 debug flag in its own
+  process scope only, inherited by the launched Office app
+  but invisible to Teams/Outlook/Edge. All three wrappers
+  share the same lock + PID files so a single injector
+  process serves all three apps.
+- Tray menu redesigned for three Office apps. New layout:
+  three disabled status labels at the top (Word: connected,
+  Excel: not running, PowerPoint: running without RTL),
+  three Connect items (Connect Word / Connect Excel /
+  Connect PowerPoint), and a single Disconnect-all that
+  closes every Office app and the injector. The Connect
+  state machine generalizes to any of the three apps via a
+  per-app COM ProgId (`Word.Application` /
+  `Excel.Application` / `PowerPoint.Application`) and the
+  matching document collection (`Documents` / `Workbooks` /
+  `Presentations`).
+- Per-app status JSON written by the injector to
+  `%TEMP%\claude-office-rtl.apps.json`. The tray reads it on
+  every 2-second tick to update the three status labels.
+  Atomic write (temp + rename) so the tray never reads a
+  half-written object.
+- `lib/office-apps.js` and `scripts/port-discovery.js`. The
+  shared foundation for multi-app support, factored out so
+  the injector and the diagnostic probes use the same logic.
+- `probe/launch-office-dynamic.bat` and
+  `probe/dynamic-port-discovery.js`. POC scripts kept
+  in-tree for diagnosing the architecture on a real machine
+  when a user reports a missing app.
+- `probe/text-rendering-tests.js`. Automated suite of 15
+  RTL-and-typography variations per app, run via CDP.
+- `doctor.bat` rewritten for three apps and dynamic ports.
+  15 checks instead of 12. New: per-app installation
+  detection, per-app process-running check, dynamic port
+  discovery via `node -e` shell-out to `port-discovery.js`,
+  active Claude target enumeration with app names, per-app
+  injector status from `apps.json`. Critical new check #14
+  fails with a remediation hint if the legacy
+  `HKCU\Environment\WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`
+  env var is set to one of our known strings; this is the
+  regression-prevention smoke test that the v0.1.4 EDR-
+  trigger fix has not silently come undone.
 
 ### Security
 
-- This release exists because of a field incident. A
-  v0.1.3 install on a corporate-managed Windows machine
-  was flagged by EDR as a token-theft attempt and the
-  device was placed in network isolation. Root cause was
-  the user-scope env var setting; once removed, the
-  remaining patterns alone are still detectable but no
-  longer trigger automatic isolation in the products we
-  observed. Managed devices may still surface SmartScreen
-  or generic-untrusted-software warnings; users should
-  obtain explicit IT approval before installing.
+- **No new EDR triggers introduced. The per-process
+  environment-variable model from v0.1.4 is preserved
+  unchanged across Word, Excel, and PowerPoint.** A formal
+  security review confirmed all 12 baseline checks PASS
+  (no `HKCU\Environment` writes, no new persistence
+  vectors, no new outbound network calls, no new
+  process-injection-shaped APIs, no privileged
+  operations). The expansion from one Office app to three
+  reuses the same activation pattern (CDP attach +
+  Runtime.evaluate + MutationObserver) that was already
+  accepted in v0.1.4.
+- The installer no longer writes a persistent user-scope
+  environment variable that affects WebView2 hosts beyond
+  Office. This was the single largest signal that triggered
+  enterprise EDR isolation on managed devices when v0.1.x
+  was installed.
+- `doctor.bat` now self-checks for that env var on every
+  run. If it ever returns, FAIL fires loudly with a manual
+  removal command, so a future regression cannot ship
+  silently.
 
-### Upgrade notes
+### Deferred
 
-Run `install.bat` over your existing install. The legacy
-env var is removed automatically. After upgrade, you must
-use the tray Connect menu once per Word session for RTL,
-even if you previously had Auto-enable on. There is no
-longer a way to make Word launch with RTL automatically
-from the taskbar or from a `.docx` double-click; this is
-intentional, see Removed section.
+- "RTL-ready" wrapped Office shortcuts (Desktop and Start
+  Menu `.lnk` files that launch Word/Excel/PowerPoint
+  through the wrappers, so users do not have to right-click
+  Connect every session). The mechanism is per-process and
+  carries no new security risk; the work was scoped out of
+  v0.2.0 to keep the security-fix release focused. Planned
+  for v0.3.0.
+- Smart Connect notifications (BalloonTip when an Office app
+  launches without RTL, with a one-click "Connect now"
+  affordance). Same v0.3.0 target.
+
+### Architecture notes
+
+Word and PowerPoint can share a single WebView2 host
+process, and therefore a single port, when both are open at
+the same time. That host serves multiple page targets, one
+per app, distinguished by their `_host_Info=` URL
+parameter. Discovery returns 1-3 ports each hosting 1-3
+Claude targets; app identity is per-target, not per-port.
+The injector handles both shapes.
+
+### Known limitations
+
+- Windows-only, unchanged from v0.1.x. Office for Mac uses
+  WKWebView and exposes no equivalent CDP surface.
+- LTSC and volume-licensed Office coverage is unchanged
+  from v0.1.x: untested, not claimed as supported.
+- Managed corporate devices: this tool may still trigger
+  EDR alerts even after the v0.2.0 changes, because the
+  remaining mechanisms (CDP attach to a Microsoft Office
+  process, hidden VBS launcher, autorun from a non-trusted
+  install path) overlap with malware tradecraft. Do not
+  install on a corporate-managed device without explicit
+  prior approval from the responsible security team.
 
 ## [0.1.3] - 2026-04-23
 

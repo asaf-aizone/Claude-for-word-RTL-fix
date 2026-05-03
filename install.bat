@@ -143,7 +143,7 @@ REM uninstall.bat, which is what both this key and the tray's Uninstall
 REM menu item invoke.
 set "REGKEY=HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeWordRTL"
 reg add "%REGKEY%" /v DisplayName     /t REG_SZ /d "Claude for Word RTL Fix" /f >nul 2>&1
-reg add "%REGKEY%" /v DisplayVersion  /t REG_SZ /d "0.1.4" /f >nul 2>&1
+reg add "%REGKEY%" /v DisplayVersion  /t REG_SZ /d "0.2.0" /f >nul 2>&1
 reg add "%REGKEY%" /v Publisher       /t REG_SZ /d "Asaf Abramzon" /f >nul 2>&1
 reg add "%REGKEY%" /v InstallLocation /t REG_SZ /d "%HERE%" /f >nul 2>&1
 reg add "%REGKEY%" /v UninstallString /t REG_SZ /d "\"%HERE%\uninstall.bat\"" /f >nul 2>&1
@@ -159,36 +159,43 @@ if errorlevel 1 (
 call :log ""
 
 REM ---------------------------------------------------------------
-REM Cleanup: legacy Auto-Enable env var from v0.1.0 - v0.1.3 installs.
+REM Cleanup: legacy Auto-Enable env var from v0.1.x installs.
 REM
-REM Earlier versions persisted
-REM   WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222
+REM v0.1.x persisted WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222
 REM as a USER env var so Word would expose CDP on every launch without
-REM the user clicking Connect. That value is also read by every other
-REM WebView2 host on the account (Teams, Outlook, Edge WebView, OneDrive
-REM UI). Enterprise EDR products (Microsoft Defender for Endpoint,
-REM CrowdStrike, SentinelOne) treat unexpected modifications of WebView2
-REM browser arguments as a credential-theft signal and may trigger host
-REM isolation on managed devices.
+REM the user having to click Connect. That value is also read by every
+REM other WebView2 host on the account (Teams, Outlook, Edge WebView,
+REM OneDrive UI). Enterprise EDR products (Microsoft Defender for
+REM Endpoint, CrowdStrike, SentinelOne) treat unexpected modifications
+REM of WebView2 browser arguments as a token-theft signal and may trigger
+REM host isolation on managed devices.
 REM
-REM v0.1.4 no longer persists this env var. The wrapper (word-wrapper.bat)
-REM sets the flag in its own process scope only, inherited by Word but
-REM not by Teams/Outlook/Edge.
+REM v0.2.0+ no longer persists this env var. The wrappers (word-wrapper.bat
+REM and equivalents for Excel/PowerPoint) set the flag in their own
+REM process scope only, which Word inherits when launched through them
+REM but Teams/Outlook/Edge do not.
 REM
 REM On install we silently remove the legacy value if (and ONLY if) it
-REM matches our known string. A user-modified value is preserved.
+REM matches one of our known strings. A user-modified value is preserved.
 REM Goto/labels on purpose: log strings may include "(legacy ...)"  with
 REM a closing paren that would terminate a parens-block early.
 REM ---------------------------------------------------------------
-set "AE_LEGACY=--remote-debugging-port=9222"
+set "AE_LEGACY_9222=--remote-debugging-port=9222"
+set "AE_LEGACY_0=--remote-debugging-port=0"
 set "AE_CHECK=%TEMP%\cwr_ae_check.txt"
 reg query "HKCU\Environment" /v "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS" > "%AE_CHECK%" 2>nul
 if errorlevel 1 goto :ae_cleanup_done
-findstr /C:"%AE_LEGACY%" "%AE_CHECK%" >nul 2>&1
-if errorlevel 1 goto :ae_cleanup_done
-REM Defensive: only auto-clean when the value is EXACTLY our legacy
-REM string, no trailing additions the user may have appended.
-findstr /C:"%AE_LEGACY% " "%AE_CHECK%" >nul 2>&1
+findstr /C:"%AE_LEGACY_9222%" "%AE_CHECK%" >nul 2>&1
+if not errorlevel 1 goto :ae_match_legacy
+findstr /C:"%AE_LEGACY_0%" "%AE_CHECK%" >nul 2>&1
+if not errorlevel 1 goto :ae_match_legacy
+goto :ae_cleanup_done
+:ae_match_legacy
+REM Defensive: only auto-clean when the value is EXACTLY one of our
+REM legacy strings, no trailing additions the user may have appended.
+findstr /C:"%AE_LEGACY_9222% " "%AE_CHECK%" >nul 2>&1
+if not errorlevel 1 goto :ae_cleanup_done
+findstr /C:"%AE_LEGACY_0% " "%AE_CHECK%" >nul 2>&1
 if not errorlevel 1 goto :ae_cleanup_done
 reg delete "HKCU\Environment" /v "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS" /f >nul 2>&1
 if errorlevel 1 goto :ae_cleanup_done
@@ -245,7 +252,7 @@ call :log "  per-process by the wrapper, not as a persistent user setting,"
 call :log "  so other apps on your account are never affected."
 call :log ""
 call :log "Security notice:"
-call :log "  While Word is running via Connect, WebView2 debug port 9222"
+call :log "  While Word is running via Connect, the WebView2 debug interface"
 call :log "  is exposed to local processes on this machine (localhost only,"
 call :log "  not the network). Only Word is affected, not Teams/Outlook/Edge."
 call :log "  Close Word when you are not using the add-in."

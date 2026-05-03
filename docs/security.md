@@ -4,34 +4,34 @@ This document explains what the tool does at runtime, what risks exist, and what
 
 ## Entry points
 
-The tool can be started in two ways, both of which end up with the same pair of running processes (Word + a hidden Node injector):
+The tool can be started in two ways, both of which end up with the same set of running processes (one or more of Word/Excel/PowerPoint, plus a single hidden Node injector serving all three):
 
-1. **Tray icon (recommended).** After `install.bat` runs, a per-user Startup-folder shortcut (`Claude for Word RTL Tray.lnk`) launches `scripts/start-tray.vbs` at login, which launches the tray icon. The user opens Word normally and then right-clicks the tray icon and picks **Connect**; the tray enumerates the open documents via COM, gracefully closes Word, and relaunches it through `word-wrapper.bat` with the debug flag set and the same documents reopened. No registry writes, no file-association changes. Fully reversed by `uninstall.bat`.
-2. **`start.bat`** - debug mode. Launches Word and the injector in the foreground with a visible log window. Useful for troubleshooting. Leaves no persistent state behind.
+1. **Tray icon (recommended).** After `install.bat` runs, a per-user Startup-folder shortcut (`Claude for Word RTL Tray.lnk`, filename retained for v0.1.x upgrade compatibility) launches `scripts/start-tray.vbs` at login, which launches the tray icon. The user opens Word, Excel, or PowerPoint normally and then right-clicks the tray icon and picks **Connect Word**, **Connect Excel**, or **Connect PowerPoint**; the tray enumerates the app's open documents/workbooks/presentations via COM, gracefully closes the app, and relaunches it through the matching wrapper (`word-wrapper.bat`, `excel-wrapper.bat`, or `powerpoint-wrapper.bat`) with the WebView2 debug flag set and the same files reopened. No registry writes, no file-association changes. Fully reversed by `uninstall.bat`.
+2. **`start.bat`** - debug mode for Word. Launches Word and the injector in the foreground with a visible log window. Useful for troubleshooting. Leaves no persistent state behind. Excel and PowerPoint do not have an equivalent debug-mode launcher; use the tray's Connect items.
 
 ## What happens at runtime
 
-1. `word-wrapper.bat` (or `start.bat`) sets the environment variable `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222`. This is a Microsoft-documented WebView2 flag used for add-in debugging.
-2. The wrapper launches Word. Word's WebView2 inherits the flag and exposes Chrome DevTools Protocol on `localhost:9222`.
-3. `scripts/inject.js` runs (hidden via `inject-hidden.vbs`, or visibly via `start.bat`). It opens an HTTP connection to `http://localhost:9222/json/list`, finds the page target whose URL matches the Claude panel (`pivot.claude.ai`, fallback `claude.ai`), and opens a WebSocket to that target's CDP endpoint.
+1. The relevant wrapper (`word-wrapper.bat`, `excel-wrapper.bat`, or `powerpoint-wrapper.bat`) sets the environment variable `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=0` in its own process scope. This is a Microsoft-documented WebView2 flag used for add-in debugging. Port=0 means WebView2 picks a free dynamic port per process (was a fixed `9222` in v0.1.x); `start.bat` keeps the same per-process pattern.
+2. The wrapper launches the Office app. The app's WebView2 host inherits the flag and exposes Chrome DevTools Protocol on whichever ephemeral localhost port the OS allocated. Multiple Office apps launched through their respective wrappers each get their own debug surface; in some cases (notably Word + PowerPoint) two apps share a single WebView2 host process and therefore the same port, with multiple page targets distinguished by the `_host_Info=` URL parameter.
+3. `scripts/inject.js` runs (hidden via `inject-hidden.vbs`, or visibly via `start.bat`). It uses `scripts/port-discovery.js` each tick to enumerate active CDP ports: walk `tasklist` for `msedgewebview2.exe` PIDs, map each PID to its LISTENING port via `netstat`, probe each candidate's `/json/list`, and collect every Claude target. For each target it opens a WebSocket to that target's CDP endpoint. App identification per target reads the `_host_Info=` URL parameter that Office appends to the panel URL.
 4. Through CDP, the script evaluates a small JavaScript snippet inside the panel that:
    - inserts a `<style>` element with RTL CSS,
    - installs a `MutationObserver` that replaces em-dash/en-dash with hyphen and arrows (U+2190 through U+2199, U+21D0 through U+21D4) with comma in visible text nodes,
    - skips `<pre>`, `<code>`, `<kbd>`, `<samp>` subtrees so source code is never modified.
-5. A polling loop repeats every 2 seconds to handle panel reloads.
-6. `scripts/tray-icon.ps1` runs in parallel as a zero-dependency PowerShell tray indicator (green / red / gray) driven by a status file at `%TEMP%\claude-word-rtl.status`.
+5. A polling loop repeats every 2 seconds to handle panel reloads and to pick up newly-launched Office apps.
+6. `scripts/tray-icon.ps1` runs in parallel as a zero-dependency PowerShell tray indicator (green / red / gray) driven by the aggregate status file at `%TEMP%\claude-word-rtl.status` (icon color) and the per-app status file at `%TEMP%\claude-office-rtl.apps.json` (per-app status labels at the top of the menu).
 
 ## Persistent state (and where)
 
 - **`%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\Claude for Word RTL Tray.lnk`** - per-user Startup-folder shortcut written by `install.bat`. Launches the tray icon at login via `wscript.exe scripts\start-tray.vbs`. Removed by `uninstall.bat`.
 - **`HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeWordRTL`** - per-user "Apps and Features" registration written by `install.bat` so the tool appears in Windows Settings > Apps > Installed apps as "Claude for Word RTL Fix". Values: `DisplayName`, `DisplayVersion`, `Publisher`, `InstallLocation`, `UninstallString` (points at `uninstall.bat`), `DisplayIcon`, `URLInfoAbout`, `NoModify`, `NoRepair`. Removed by `uninstall.bat`. HKLM is never touched; no other registry keys are written.
-- **`%TEMP%\claude-word-rtl.status`**, **`.pid`**, **`.tray.pid`**, **`.lock`** - small transient files used for IPC between the injector, the tray, and the wrapper. All written at runtime only. Cleared by `cleanup.bat` and `uninstall.bat`.
+- **`%TEMP%\claude-word-rtl.status`**, **`.pid`**, **`.tray.pid`**, **`.lock`**, plus **`%TEMP%\claude-office-rtl.apps.json`** (v0.2.0+ per-app state file written by the injector and read by the tray for the three per-app status labels) - small transient files used for IPC between the injector, the tray, and the three wrappers. All written at runtime only. Cleared by `cleanup.bat` and `uninstall.bat`. The `claude-word-rtl.*` filenames are kept for v0.1.x upgrade compatibility even though the tool now covers all three Office apps; the prefix is a name, not a constraint.
 - **`scripts/node_modules/`** - installed on first run. Removed by `uninstall.bat`.
 - **`install.log`** - next to `install.bat`, captures output of the last install run. Covered by `.gitignore`. Delete manually if desired.
 
-No file-association changes, no Scheduled Tasks, no system-wide services, no changes to `Normal.dotm` or any Word template.
+No file-association changes, no Scheduled Tasks, no system-wide services, no changes to `Normal.dotm` or any Word/Excel/PowerPoint template.
 
-If you are upgrading from v0.3.x, `uninstall.bat` also performs best-effort cleanup of legacy artifacts: the old "Word (RTL)" Start Menu shortcut and the old `HKCU\Software\Classes\Word.Document.*` overrides + `HKCU\Software\ClaudeWordRTL` marker.
+If you are upgrading from v0.1.x, `uninstall.bat` also performs best-effort cleanup of legacy artifacts: the old "Word (RTL)" Start Menu shortcut and the old `HKCU\Software\Classes\Word.Document.*` overrides + `HKCU\Software\ClaudeWordRTL` marker. v0.1.x also wrote `HKCU\Environment\WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` when Auto-enable was on; v0.2.0 clears it on install and uninstall, only when its value matches one of our known strings (`=9222` from v0.1.x or `=0` from a v0.2.0 prerelease).
 
 ## Processes and files loaded
 
@@ -47,18 +47,18 @@ No other binaries are installed or run by this tool.
 
 ### Local debug port exposure
 
-While Word is running via this tool, port `9222` listens on `localhost` (not the network). Any local process running under the same user account can connect to it and:
+While Word, Excel, or PowerPoint is running via this tool, that app's WebView2 host listens on a dynamic localhost port (one per Office WebView2 host process; the OS picks a free port via `--remote-debugging-port=0`). The port is bound to localhost only, not the network. Any local process running under the same user account can connect to it and:
 
 - read the DOM of the Claude panel, including visible conversation content,
 - read cookies scoped to `claude.ai`,
 - execute arbitrary JavaScript inside the panel.
 
-This is the single most important risk. It is equivalent to running any Chromium-based application with `--remote-debugging-port` enabled and is a known local-attack surface.
+This is the single most important risk. It is equivalent to running any Chromium-based application with `--remote-debugging-port` enabled and is a known local-attack surface. Dynamic ports do not change the threat model versus the v0.1.x fixed-9222 model: a local attacker can enumerate listening ports just as easily as it could connect to a known port number, and `port-discovery.js` itself is the proof of how a friendly process does so.
 
 **Mitigations:**
-- Close Word (via the tray's **Disconnect** item, or normally, or via `cleanup.bat`) when you are not actively using the Claude panel.
-- Do not run untrusted software on the same user account while Word is open via this tool.
-- If you want to pause the tool temporarily, right-click the tray icon and pick **Exit**. Word then opens normally (no wrapper, no debug port) until you relaunch the tray.
+- Close the Office app (via the tray's **Disconnect all** item, or normally, or via `cleanup.bat`) when you are not actively using the Claude panel.
+- Do not run untrusted software on the same user account while an Office app is open via this tool.
+- If you want to pause the tool temporarily, right-click the tray icon and pick **Exit**. Office apps then open normally (no wrapper, no debug port) until you relaunch the tray.
 - **Not exposed to the network** - WebView2 only binds to `127.0.0.1`. Remote hosts cannot reach it.
 
 ### Supply-chain trust in npm dependencies
@@ -83,18 +83,47 @@ Organizations with DLP, EDR, or Group Policy controls may detect WebView2 debug-
   - normal Claude and Office traffic, unchanged, routed by Word itself.
 - Does not read, write, or exfiltrate conversation content. The injected JavaScript modifies the DOM in place; nothing is serialized, transmitted, or written to disk by the injector beyond the one-line status/PID files listed above.
 - Does not modify files outside its own folder and the `%TEMP%` transients listed above (plus the single per-user Startup-folder shortcut and the single per-user Apps-and-Features `Uninstall` registry key, both written by `install.bat` and removed by `uninstall.bat`).
-- Does not change Word's file associations.
+- Does not change Office file associations.
 - Does not create Scheduled Tasks or services.
-- Does not modify `Normal.dotm` or any Word template.
+- Does not modify `Normal.dotm` or any Word/Excel/PowerPoint template.
 - Does not bypass, disable, or interfere with any guardrails, rate limits, or policies imposed by Claude or Office.
 
 ## Reviewing the code
 
 The core is short enough to audit in one sitting:
 
-- `scripts/inject.js` - CDP connection, CSS and observer script, polling loop (~340 lines).
-- `scripts/tray-icon.ps1` - NotifyIcon indicator, Connect/Disconnect state machine, Auto-enable toggle (~630 lines).
+- `scripts/inject.js` - CDP connection, CSS and observer script, polling loop, per-app status writer.
+- `scripts/port-discovery.js` - dynamic-port enumeration via `tasklist` + `netstat` + `/json/list` probe; per-target app identification via `_host_Info=`.
+- `lib/office-apps.js` - shared per-app metadata (process name, `_host_Info` key) used by the injector and the probes.
+- `scripts/tray-icon.ps1` - NotifyIcon indicator, per-app Connect state machines, Disconnect-all, per-app status labels.
 - `scripts/check-update.js` - GitHub releases check (~105 lines, uses Node built-in `https` only).
-- `install.bat`, `uninstall.bat`, `word-wrapper.bat`, `doctor.bat`, `cleanup.bat`, `start.bat`, `inject-hidden.vbs`, `scripts/start-tray.vbs` - plain-text launchers.
+- `install.bat`, `uninstall.bat`, `word-wrapper.bat`, `excel-wrapper.bat`, `powerpoint-wrapper.bat`, `doctor.bat`, `cleanup.bat`, `start.bat`, `inject-hidden.vbs`, `scripts/start-tray.vbs` - plain-text launchers.
 
 Everything else is documentation.
+
+## Anthropic Terms of Service compliance
+
+This tool operates entirely on the user's machine. It does not access
+Anthropic's API, does not reverse-engineer the Service, does not bypass
+guardrails, rate limits, or safety systems, and does not scrape or
+harvest data. The conversation between the user and Claude is unchanged
+by this tool. The Claude add-in receives the same input and produces
+the same output it would have produced without this tool installed.
+
+What the tool does is restyle the locally-rendered HTML inside
+Microsoft's WebView2 process on the user's own machine, adding RTL CSS
+rules and replacing certain glyphs (em-dash, en-dash, several arrow
+characters) in already-rendered text. Functionally this is equivalent
+to a user stylesheet, a browser accessibility extension, or a screen
+reader: the underlying Service is untouched; only the local rendering
+is adapted so a Hebrew-speaking user can read it.
+
+Anthropic's Acceptable Use Policy and Consumer Terms govern the user's
+account at all times, regardless of whether this tool is installed.
+The user is responsible for compliance with those terms. If Anthropic's
+terms change to restrict client-side modifications, the user should
+comply with Anthropic's terms over this tool.
+
+The tool is open source under Apache 2.0. The full source - injector,
+tray, installer, every script - is auditable in this repository. There
+is no obfuscation, no compiled binary, no closed-source component.
