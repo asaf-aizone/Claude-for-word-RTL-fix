@@ -5,6 +5,59 @@ All notable changes to this project will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.1] - 2026-05-03
+
+### Fixed
+
+- "Check for updates..." in the tray now works for users who
+  installed v0.1.4 or v0.2.0 before the v0.2.1 repository
+  rename. The bundled update checker
+  (`scripts/check-update.js`) used Node's built-in `https.get`,
+  which does not follow HTTP redirects. Older installs query
+  `api.github.com/repos/asaf-aizone/Claude-for-word-RTL-fix/...`,
+  which now returns `301 Moved Permanently` because of the
+  rename, and the checker reported `[ERROR] Could not reach
+  GitHub: HTTP 301` instead of detecting the new release. The
+  checker now follows up to 3 hops of 301/302/307/308
+  redirects, so future repository moves cannot break the
+  update path again.
+- Existing v0.1.4 and v0.2.0 installs will still see the
+  HTTP 301 error message until the user manually downloads
+  v0.2.1 from the Releases page; the tool itself keeps
+  injecting RTL fine, only the in-tray update notification
+  is affected on those older versions.
+
+### Changed
+
+- Repository renamed from `Claude-for-word-RTL-fix` to
+  `Claude-for-Office-RTL-fix` to match the v0.2.0 product
+  expansion (Word + Excel + PowerPoint instead of Word only).
+  GitHub provides a permanent redirect from the old URL, so
+  every old clone, bookmark, install link, and `git remote`
+  setting continues to work without manual changes.
+- Hard-coded repository URLs updated to the new name in:
+  `install.bat` (Apps and Features `URLInfoAbout`),
+  `doctor.bat` (issue reporting link),
+  `scripts/check-update.js` (`REPO` constant and User-Agent),
+  `scripts/package.json` (`repository.url`),
+  `scripts/tray-icon.ps1` (manual fallback URL on
+  update-check failure), `README.md`, `README.he.md`, and
+  `CLAUDE.md`. The displayed product name and Apps and
+  Features `DisplayName` ("Claude for Word RTL Fix") are
+  intentionally unchanged for v0.1.x upgrade compatibility,
+  same as in v0.2.0.
+
+### Known limitation
+
+- Users still on v0.1.4 or v0.2.0 will see
+  `[ERROR] Could not reach GitHub: HTTP 301` when they click
+  "Check for updates..." in the tray, because their bundled
+  `check-update.js` predates the redirect-follow fix. They
+  need to manually grab v0.2.1 from the Releases page once;
+  after that the in-tray update check works normally for
+  every future release. The RTL injection itself is not
+  affected.
+
 ## [0.2.0] - 2026-05-02
 
 ### Removed

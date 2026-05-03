@@ -10,7 +10,7 @@
 
 **גרסה מלאה (דו-לשונית, עם צילומי מסך ותמונות): [README.md](README.md)** · **יומן שינויים: [CHANGELOG.md](CHANGELOG.md)**
 
-תיקון CSS וטיפוגרפיה בצד הלקוח לתצוגה העברית בתוסף Claude ל-Microsoft Word, Excel ו-PowerPoint. החל מ-v0.2.0 הכלי תומך בשלוש האפליקציות בו-זמנית. שם המאגר ב-GitHub נשאר `Claude-for-word-RTL-fix` כדי לא לשבור עדכונים מגרסאות v0.1.x; שם המוצר התעדכן בלבד.
+תיקון CSS וטיפוגרפיה בצד הלקוח לתצוגה העברית בתוסף Claude ל-Microsoft Word, Excel ו-PowerPoint. החל מ-v0.2.0 הכלי תומך בשלוש האפליקציות בו-זמנית. שם המאגר ב-GitHub עודכן ב-v0.2.1 ל-`Claude-for-Office-RTL-fix` (היה `Claude-for-word-RTL-fix`). GitHub מחזיק redirect קבוע מהשם הישן, אז clones ו-bookmarks מגרסאות קודמות ממשיכים לעבוד.
 
 תוסף Claude הרשמי ל-Office מציג כיום טקסט עברי משמאל לימין, עם סימני רשימה ופיסוק בצד הלא נכון. הכלי הזה מתחבר לחלונית WebView2 של התוסף בכל אחת משלוש האפליקציות באמצעות Chrome DevTools Protocol הסטנדרטי, ומזריק גיליון סגנונות וכן MutationObserver קטן כדי לתקן את התצוגה.
 
@@ -119,7 +119,7 @@
 
 שלושה שלבים:
 
-1. הורידו את ה-ZIP החדש מ-[Releases](https://github.com/asaf-aizone/Claude-for-word-RTL-fix/releases/latest) וחלצו מעל תיקיית ההתקנה הקיימת (החליפו קבצים כשמתבקש).
+1. הורידו את ה-ZIP החדש מ-[Releases](https://github.com/asaf-aizone/Claude-for-Office-RTL-fix/releases/latest) וחלצו מעל תיקיית ההתקנה הקיימת (החליפו קבצים כשמתבקש).
 2. סגרו לחלוטין את כל אפליקציות Office הרלוונטיות (Word, Excel, PowerPoint), כולל תהליכי רקע דרך Task Manager במקרה הצורך.
 3. הפעילו `install.bat` מחדש. הסקריפט עוצר את הטריי הישן דרך קובץ ה-PID לפני טעינת הקוד החדש, אז העדכון נכנס לתוקף מיד בלי צורך ב-logout.
 

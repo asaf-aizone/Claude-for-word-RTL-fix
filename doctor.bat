@@ -285,7 +285,7 @@ call :log ""
 call :log "--- Summary: !OK_COUNT! OK, !INFO_COUNT! INFO, !WARN_COUNT! WARN, !FAIL_COUNT! FAIL ---"
 call :log ""
 call :log "Attach doctor.log when reporting issues at:"
-call :log "  https://github.com/asaf-aizone/Claude-for-word-RTL-fix/issues"
+call :log "  https://github.com/asaf-aizone/Claude-for-Office-RTL-fix/issues"
 call :log ""
 call :log "Full log saved to: %LOG%"
 

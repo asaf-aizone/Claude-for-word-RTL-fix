@@ -544,7 +544,7 @@ $script:miCheckUpdate.add_Click({
         else {
             # [ERROR], network failure, 404 before first release, or any
             # unexpected output. Show the raw line plus a manual link.
-            $fallbackUrl = 'https://github.com/asaf-aizone/Claude-for-word-RTL-fix/releases/latest'
+            $fallbackUrl = 'https://github.com/asaf-aizone/Claude-for-Office-RTL-fix/releases/latest'
             [System.Windows.Forms.MessageBox]::Show(
                 "Could not check for updates.`n`n" +
                 $line.Trim() + "`n`n" +

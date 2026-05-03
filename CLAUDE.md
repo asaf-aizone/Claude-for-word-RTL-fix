@@ -30,7 +30,7 @@ Files under `scripts/`:
 - `scripts/inject.js` - the Node injector. Discovers Office WebView2 hosts at runtime via `port-discovery.js` (no fixed port), attaches to each Claude target it finds, and injects `<style>` + MutationObserver via `Runtime.evaluate`. Re-injects every 2s (`POLL_MS`). Writes PID to `%TEMP%\claude-word-rtl.pid`, aggregate one-line status (`CONNECTED` / `DISCONNECTED` / `ERROR:<msg>`) to `%TEMP%\claude-word-rtl.status`, and per-app state to `%TEMP%\claude-office-rtl.apps.json`. Truncates `%TEMP%\claude-word-rtl.log` on each start.
 - `scripts/port-discovery.js` - the v0.2.0 dynamic-port mechanism. Walks `tasklist` for `msedgewebview2.exe` PIDs, maps each PID to its LISTENING port via `netstat`, probes every candidate's `/json/list` for Claude targets, and returns each `{target, app, port}` triple. Per-target app identification reads the `_host_Info=` URL parameter that Office appends to the panel URL.
 - `scripts/tray-icon.ps1` - PowerShell tray icon host. Singleton via named mutex. Polls `claude-word-rtl.status` every 2s for the icon color and `claude-office-rtl.apps.json` for the three per-app status labels at the top of the menu. Implements per-app Connect state machines on Timers (Connect Word / Connect Excel / Connect PowerPoint), Disconnect-all cleanup, Show diagnostic log, Check for updates dialog, Uninstall launcher, Exit. Auto-enable toggle was removed in v0.1.4 (security: persistent env var was an EDR trigger). Staleness detection: if PID is not alive AND status file is older than `$StaleSeconds`, the effective status is forced to `DISCONNECTED` so the icon does not lie when the injector crashed. Icon glyph is "O" (Office) on a status-colored rounded square with a small RTL arrow.
-- `scripts/check-update.js` - fetches `https://api.github.com/repos/asaf-aizone/Claude-for-word-RTL-fix/releases/latest` via Node's built-in `https` module. Compares `tag_name` to the local `package.json` version numerically. Zero npm dependencies. 5s timeout.
+- `scripts/check-update.js` - fetches `https://api.github.com/repos/asaf-aizone/Claude-for-Office-RTL-fix/releases/latest` via Node's built-in `https` module. Compares `tag_name` to the local `package.json` version numerically. Zero npm dependencies. 5s timeout.
 - `scripts/create-shortcut.ps1` - called by `install.bat` to create the Startup-folder `.lnk` that points at `start-tray.vbs`.
 - `scripts/start-tray.vbs` - hidden launcher for `tray-icon.ps1`. The Startup-folder shortcut points here.
 - `scripts/package.json` - declares `chrome-remote-interface` dependency and the local `version` string. `version` is the authoritative install version for comparisons.
@@ -93,7 +93,7 @@ Status file contracts:
 Update flow (`Check for updates...`):
 
 - Tray invokes `node scripts/check-update.js`.
-- `check-update.js` GETs `https://api.github.com/repos/asaf-aizone/Claude-for-word-RTL-fix/releases/latest` with a 5s timeout. User-Agent is set, `Accept: application/vnd.github+json`.
+- `check-update.js` GETs `https://api.github.com/repos/asaf-aizone/Claude-for-Office-RTL-fix/releases/latest` with a 5s timeout. User-Agent is set, `Accept: application/vnd.github+json`.
 - Script parses the JSON, normalizes `tag_name`, compares numerically to `require('./package.json').version`. Pre-release suffixes (`-beta` etc.) are stripped.
 - If newer: prints `UPDATE_AVAILABLE` + version + download URL. The tray dialog shows the current install folder path, opens the GitHub release page in the default browser, and opens the install folder in Explorer.
 - If up to date or network error: tray shows a simple dialog. Manual fallback link is included on error.
@@ -199,21 +199,21 @@ The user may be on an older version with known bugs. Always check current state 
 
 1. **Read the installed version:** `scripts/package.json` field `"version"`.
 2. **Fetch the latest release notes from GitHub** - do NOT rely only on this file, which ages:
-   - Releases: <https://github.com/asaf-aizone/Claude-for-word-RTL-fix/releases>
-   - Latest release API (JSON): <https://api.github.com/repos/asaf-aizone/Claude-for-word-RTL-fix/releases/latest>
+   - Releases: <https://github.com/asaf-aizone/Claude-for-Office-RTL-fix/releases>
+   - Latest release API (JSON): <https://api.github.com/repos/asaf-aizone/Claude-for-Office-RTL-fix/releases/latest>
    - Use `gh release view --json name,tagName,body` if the user has `gh` installed, otherwise `curl` or `WebFetch` to the API URL.
 3. If the installed version is older than the latest, read the release notes for every version in between. Release notes describe bugs, fixes, and upgrade steps.
 4. Read `CHANGELOG.md` in this folder for the complete history.
 5. Read the README - specifically the "Updating to a newer version" / "עדכון לגרסה חדשה" section - before walking the user through an upgrade.
 
-Note: the GitHub repository is still named `Claude-for-word-RTL-fix` (lowercase "word") even though the tool now covers all three Office apps. The repo URL stays the same; only the displayed product name changed in v0.2.0.
+Note: the GitHub repository was renamed in v0.2.1 from `Claude-for-word-RTL-fix` to `Claude-for-Office-RTL-fix` to match the v0.2.0 multi-app product name. GitHub serves a permanent HTTP 301 redirect from the old URL, so existing clones, bookmarks, v0.1.x install links, and `git remote` URLs all keep working without intervention. v0.2.1 also taught `scripts/check-update.js` to follow 301/302 redirects so future repository moves cannot break the update notification path.
 
 ## Known issue in v0.1.0 (fixed in v0.1.1)
 
 If the user says the tray is **red and stays red even after clicking "Connect"** or "nothing happens when I open Word", check `scripts/package.json`:
 
 - If version is `0.1.0`: the user has a known bug. Auto-enable sets the WebView2 debug flag on Word but does NOT start the Node injector, so the tray has nothing to attach to. Tell the user to upgrade to v0.1.1 or newer - the fix is that the tray now auto-launches the injector whenever Word is running without one. The v0.1.0 "Check for updates" dialog does not show the install folder; users have to find it manually via **Windows Settings > Apps > Installed apps > Claude for Word RTL Fix**. Full upgrade steps in the v0.1.1 release notes.
-- If version is `0.1.1` or later (current is `0.2.0`): the auto-launch mechanism is in place. Walk through tray log diagnostics: `%TEMP%\claude-word-rtl.log`, `%TEMP%\claude-word-rtl.status`, `%TEMP%\claude-office-rtl.apps.json`, `%TEMP%\claude-word-rtl.pid`.
+- If version is `0.1.1` or later (current is `0.2.1`): the auto-launch mechanism is in place. Walk through tray log diagnostics: `%TEMP%\claude-word-rtl.log`, `%TEMP%\claude-word-rtl.status`, `%TEMP%\claude-office-rtl.apps.json`, `%TEMP%\claude-word-rtl.pid`.
 
 ## What NOT to do
 
@@ -226,4 +226,4 @@ If the user says the tray is **red and stays red even after clicking "Connect"**
 
 ## When the user asks "what version is latest?"
 
-Do not answer from memory. Fetch <https://api.github.com/repos/asaf-aizone/Claude-for-word-RTL-fix/releases/latest> and read the `tag_name` and `body`. Models trained before the latest release will not know.
+Do not answer from memory. Fetch <https://api.github.com/repos/asaf-aizone/Claude-for-Office-RTL-fix/releases/latest> and read the `tag_name` and `body`. Models trained before the latest release will not know.
