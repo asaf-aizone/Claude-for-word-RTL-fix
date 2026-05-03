@@ -1,12 +1,13 @@
 @echo off
-REM Claude for Word RTL Fix - cleanup helper.
+REM Claude for Office RTL Fix - cleanup helper.
 REM Stops all node.exe processes that could be running inject.js and verifies
-REM port 9222 is no longer listening. Does NOT close Word.
+REM no Office WebView2 debug ports remain exposed. Does NOT close any
+REM Office app.
 
 setlocal
 
 echo ================================================================
-echo  Claude for Word RTL Fix - Cleanup
+echo  Claude for Office RTL Fix - Cleanup
 echo ================================================================
 echo.
 
@@ -36,15 +37,13 @@ if exist "%TEMP%\claude-word-rtl.status" del /q "%TEMP%\claude-word-rtl.status" 
 if exist "%TEMP%\claude-word-rtl.lock"   del /q "%TEMP%\claude-word-rtl.lock"   >nul 2>&1
 
 echo.
-REM Check if anything still listens on 9222
-netstat -an | find "9222" | find "LISTENING" >nul
-if %ERRORLEVEL% equ 0 (
-    echo [WARN] Port 9222 is still listening.
-    echo This means Word is still running with the debug flag enabled.
-    echo To fully close the debug port, close Word.
-) else (
-    echo Port 9222 is closed. Debug surface is no longer exposed.
-)
+REM Check if any Office WebView2 host still has a debug port open. v0.2.0
+REM uses dynamic ports (--remote-debugging-port=0), so we look for
+REM msedgewebview2.exe processes spawned by Word, Excel, or PowerPoint and
+REM report any LISTENING TCP socket they own. The user does not need to
+REM see specific port numbers; the message just says "still exposed" or
+REM "all closed".
+powershell -NoProfile -Command "$wv=Get-CimInstance Win32_Process -Filter \"Name='msedgewebview2.exe'\" -ErrorAction SilentlyContinue; if ($wv) { $offices=Get-CimInstance Win32_Process -Filter \"Name='WINWORD.EXE' OR Name='EXCEL.EXE' OR Name='POWERPNT.EXE'\" -ErrorAction SilentlyContinue; if ($offices) { Write-Host '[WARN] One or more Office WebView2 hosts are still running with the debug flag enabled.'; Write-Host '       To fully close the debug ports, close Word, Excel, and PowerPoint.' } else { Write-Host 'No Office app is running. Any WebView2 hosts found belong to other apps and are unaffected by this tool.' } } else { Write-Host 'No WebView2 hosts running. Debug surface is no longer exposed.' }"
 
 echo.
 echo Cleanup complete.

@@ -12,3 +12,11 @@
 *.jpeg binary
 *.gif binary
 *.ico binary
+
+# Exclude diagnostic and bug-investigation files from the GitHub source
+# archive zip. v0.2.0 security review (see CHANGELOG) recommended that
+# probe/ POC scripts not ship to end users; they use fixed ports for
+# one-shot manual diagnostics, not the production dynamic-port path.
+# Developers cloning the repo via git still get these directories.
+probe/ export-ignore
+docs/bugs/ export-ignore

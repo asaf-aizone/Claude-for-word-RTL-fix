@@ -5,7 +5,7 @@ All notable changes to this project will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.2.0] - unreleased
+## [0.2.0] - 2026-05-02
 
 ### Removed
 
@@ -68,6 +68,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- Excel and PowerPoint per-app launchers (`excel-wrapper.bat`,
+  `powerpoint-wrapper.bat`) parallel to `word-wrapper.bat`.
+  Each wrapper sets the WebView2 debug flag in its own
+  process scope only, inherited by the launched Office app
+  but invisible to Teams/Outlook/Edge. All three wrappers
+  share the same lock + PID files so a single injector
+  process serves all three apps.
+- Tray menu redesigned for three Office apps. New layout:
+  three disabled status labels at the top (Word: connected,
+  Excel: not running, PowerPoint: running without RTL),
+  three Connect items (Connect Word / Connect Excel /
+  Connect PowerPoint), and a single Disconnect-all that
+  closes every Office app and the injector. The Connect
+  state machine generalizes to any of the three apps via a
+  per-app COM ProgId (`Word.Application` /
+  `Excel.Application` / `PowerPoint.Application`) and the
+  matching document collection (`Documents` / `Workbooks` /
+  `Presentations`).
+- Per-app status JSON written by the injector to
+  `%TEMP%\claude-office-rtl.apps.json`. The tray reads it on
+  every 2-second tick to update the three status labels.
+  Atomic write (temp + rename) so the tray never reads a
+  half-written object.
 - `lib/office-apps.js` and `scripts/port-discovery.js`. The
   shared foundation for multi-app support, factored out so
   the injector and the diagnostic probes use the same logic.
@@ -77,22 +100,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   when a user reports a missing app.
 - `probe/text-rendering-tests.js`. Automated suite of 15
   RTL-and-typography variations per app, run via CDP.
+- `doctor.bat` rewritten for three apps and dynamic ports.
+  15 checks instead of 12. New: per-app installation
+  detection, per-app process-running check, dynamic port
+  discovery via `node -e` shell-out to `port-discovery.js`,
+  active Claude target enumeration with app names, per-app
+  injector status from `apps.json`. Critical new check #14
+  fails with a remediation hint if the legacy
+  `HKCU\Environment\WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS`
+  env var is set to one of our known strings; this is the
+  regression-prevention smoke test that the v0.1.4 EDR-
+  trigger fix has not silently come undone.
 
 ### Security
 
+- **No new EDR triggers introduced. The per-process
+  environment-variable model from v0.1.4 is preserved
+  unchanged across Word, Excel, and PowerPoint.** A formal
+  security review confirmed all 12 baseline checks PASS
+  (no `HKCU\Environment` writes, no new persistence
+  vectors, no new outbound network calls, no new
+  process-injection-shaped APIs, no privileged
+  operations). The expansion from one Office app to three
+  reuses the same activation pattern (CDP attach +
+  Runtime.evaluate + MutationObserver) that was already
+  accepted in v0.1.4.
 - The installer no longer writes a persistent user-scope
   environment variable that affects WebView2 hosts beyond
   Office. This was the single largest signal that triggered
   enterprise EDR isolation on managed devices when v0.1.x
   was installed.
+- `doctor.bat` now self-checks for that env var on every
+  run. If it ever returns, FAIL fires loudly with a manual
+  removal command, so a future regression cannot ship
+  silently.
 
 ### Deferred
 
-- Excel and PowerPoint per-app wrappers (`excel-wrapper.bat`,
-  `powerpoint-wrapper.bat`) plus the matching tray menu
-  Connect entries. The injector and the port-discovery
-  layer already handle all three apps; the user-facing
-  launch path is what remains. Tracked for the next release.
+- "RTL-ready" wrapped Office shortcuts (Desktop and Start
+  Menu `.lnk` files that launch Word/Excel/PowerPoint
+  through the wrappers, so users do not have to right-click
+  Connect every session). The mechanism is per-process and
+  carries no new security risk; the work was scoped out of
+  v0.2.0 to keep the security-fix release focused. Planned
+  for v0.3.0.
+- Smart Connect notifications (BalloonTip when an Office app
+  launches without RTL, with a one-click "Connect now"
+  affordance). Same v0.3.0 target.
 
 ### Architecture notes
 
