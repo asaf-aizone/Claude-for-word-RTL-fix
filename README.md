@@ -1,22 +1,22 @@
 <div dir="rtl">
 
-<h1>Claude for Word RTL Fix</h1>
+<h1>Claude for Office RTL Fix (Word, Excel, PowerPoint)</h1>
 
 <p>
-תיקון RTL לפאנל של Claude ב-Microsoft Word. מקומי, בלי טלמטריה, Apache 2.0.<br>
-<em>לכל מי שכותב עברית ב-Word עם תוסף Claude. Windows 10/11.</em>
+תיקון RTL לפאנל של Claude ב-Microsoft Word, Excel ו-PowerPoint. מקומי, בלי טלמטריה, Apache 2.0.<br>
+<em>לכל מי שכותב עברית באפליקציות Office עם תוסף Claude. Windows 10/11.</em>
 </p>
 
 <p>
-<strong>אינו תוסף רשמי של Anthropic או של Microsoft.</strong> כלי open-source עצמאי.
+<strong>אינו תוסף רשמי של Anthropic או של Microsoft.</strong> כלי open-source עצמאי. שם המאגר ב-GitHub עדיין <code>Claude-for-word-RTL-fix</code> (אותיות קטנות) כדי לא לשבור עדכונים מגרסאות v0.1.x; שם המוצר התעדכן בלבד החל מ-v0.2.0.
 </p>
 
 <blockquote>
 <p>
-<strong>Windows בלבד.</strong> הכלי לא עובד על macOS או Linux. תוסף Claude ל-Word
-מבוסס על WebView2 של מיקרוסופט, שקיים רק ב-Windows. ל-Word ל-Mac יש runtime
+<strong>Windows בלבד.</strong> הכלי לא עובד על macOS או Linux. תוסף Claude ל-Office
+מבוסס על WebView2 של מיקרוסופט, שקיים רק ב-Windows. ל-Office ל-Mac יש runtime
 אחר (WKWebView) שלא חושף את אותו debugging interface, וכל שכבת ההפעלה (bat, vbs,
-PowerShell, Registry, Startup folder) לא רלוונטית שם. אם אתם על Mac, אין port מ-Word.
+PowerShell, Registry, Startup folder) לא רלוונטית שם. אם אתם על Mac, אין port מ-Office.
 </p>
 </blockquote>
 
@@ -46,14 +46,14 @@ Falcon, SentinelOne, Sophos) עלולות לזהות את ההתקנה כפעי�
 <h2>מה זה עושה?</h2>
 
 <p>
-הפאנל של Claude בתוך Word לא תומך ב-RTL. עברית יוצאת הפוכה, bullets
-בצד הלא נכון, פיסוק נופל איפה שלא צריך. הכלי מתחבר ל-WebView2 של
-הפאנל דרך Chrome DevTools Protocol, מזריק CSS ו-MutationObserver, והפאנל
-עובר ל-RTL תקין.
+הפאנל של Claude בתוך אפליקציות Office (Word, Excel, PowerPoint) לא תומך
+ב-RTL. עברית יוצאת הפוכה, bullets בצד הלא נכון, פיסוק נופל איפה שלא צריך.
+הכלי מתחבר ל-WebView2 של הפאנל בכל אחת משלוש האפליקציות דרך Chrome
+DevTools Protocol, מזריק CSS ו-MutationObserver, והפאנל עובר ל-RTL תקין.
 </p>
 
 <p>
-המודל של Claude, ה-API של Anthropic, ו-Word עצמו לא נגועים. רק ה-DOM
+המודל של Claude, ה-API של Anthropic, ואפליקציות Office עצמן לא נגועים. רק ה-DOM
 המקומי של הפאנל, ורק כל עוד הפאנל פתוח.
 </p>
 
@@ -86,9 +86,9 @@ Falcon, SentinelOne, Sophos) עלולות לזהות את ההתקנה כפעי�
 
 <h3>אייקון Tray ליד השעון</h3>
 <p>
-אייקון קטן ליד השעון: ריבוע מעוגל עם האות <strong>W</strong> וחץ RTL
+אייקון קטן ליד השעון: ריבוע מעוגל עם האות <strong>O</strong> (Office) וחץ RTL
 לבנים, וצבע רקע שמשקף את המצב. אפור = בטעינה, אדום = מנותק, ירוק =
-RTL פעיל. קליק ימני פותח תפריט קצר. אין כניסה ב-Start Menu, אין שינוי
+RTL פעיל באחת או יותר משלוש אפליקציות Office. קליק ימני פותח תפריט קצר. אין כניסה ב-Start Menu, אין שינוי
 של קיצורי מערכת.
 </p>
 <p>
@@ -106,19 +106,29 @@ RTL פעיל. קליק ימני פותח תפריט קצר. אין כניסה ב
   </thead>
   <tbody>
     <tr>
-      <td>Connect (relaunch Claude for Word RTL Fix)</td>
-      <td>האייקון אדום</td>
-      <td>מעלה מחדש את Word דרך ה-wrapper עם debug-port פתוח. אם Word רץ - שומר מסמכים, מבקש אישור, מריץ מחדש עם אותם מסמכים</td>
+      <td>Word: ... / Excel: ... / PowerPoint: ...</td>
+      <td>תמיד (שלוש שורות מנוטרלות בראש התפריט)</td>
+      <td>תוויות סטטוס לקריאה בלבד, אחת לכל אפליקציה. כל שורה יכולה להציג <code>connected</code>, <code>not running</code>, <code>running without RTL</code>, או <code>error</code>. מתעדכנות כל 2 שניות מתוך <code>%TEMP%\claude-office-rtl.apps.json</code></td>
     </tr>
     <tr>
-      <td>Disconnect (close Claude for Word RTL Fix)</td>
+      <td>Connect Word</td>
       <td>תמיד</td>
-      <td>כפתור התאוששות אוניברסלי. עוצר timers של Connect באוויר, סוגר את Word (graceful + force כגיבוי), הורג את ה-injector, מנקה את כל ה-state files. אם משהו השתבש - לחיצה כאן תמיד מחזירה למצב אפס</td>
+      <td>מעלה את Word מחדש דרך <code>word-wrapper.bat</code> עם debug-port פתוח (פורט דינמי). אם Word רץ - מונה את המסמכים הפתוחים דרך COM, מבקש אישור, מריץ מחדש עם אותם מסמכים</td>
     </tr>
     <tr>
-      <td>Auto-enable at every Word launch (checkbox)</td>
+      <td>Connect Excel</td>
       <td>תמיד</td>
-      <td>מדליק RTL לכל פתיחה עתידית של Word בלי שתצטרכו ללחוץ Connect. ראו "שני מצבי עבודה" למטה</td>
+      <td>אותו זרם ל-Excel דרך <code>excel-wrapper.bat</code>. מונה דרך <code>Workbooks</code> במקום <code>Documents</code></td>
+    </tr>
+    <tr>
+      <td>Connect PowerPoint</td>
+      <td>תמיד</td>
+      <td>אותו זרם ל-PowerPoint דרך <code>powerpoint-wrapper.bat</code>. מונה דרך <code>Presentations</code></td>
+    </tr>
+    <tr>
+      <td>Disconnect all</td>
+      <td>תמיד</td>
+      <td>כפתור התאוששות אוניברסלי לשלוש האפליקציות. עוצר timers של Connect באוויר, סוגר את כל אפליקציות Office הפתוחות (graceful + force כגיבוי), הורג את ה-injector, מנקה את כל ה-state files. לחיצה כאן תמיד מחזירה למצב אפס</td>
     </tr>
     <tr>
       <td>Show diagnostic log</td>
@@ -147,47 +157,36 @@ RTL פעיל. קליק ימני פותח תפריט קצר. אין כניסה ב
   <img src="docs/images/tray-menu.png" alt="תפריט קליק-ימני של ה-tray" width="360">
 </p>
 
-<h3>שני מצבי עבודה</h3>
-
-<table dir="rtl">
-  <thead>
-    <tr><th>מצב</th><th>מה קורה</th><th>למי מתאים</th></tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td>ידני (ברירת מחדל)</td>
-      <td>כל פעם שפותחים את Word, האייקון אדום. לחיצה על <strong>Connect</strong> מריצה את Word מחדש דרך ה-wrapper. RTL פעיל רק כשבוחרים בכך</td>
-      <td>למי שרוצה שליטה מלאה, או עובד לעיתים רחוקות עם Claude בעברית</td>
-    </tr>
-    <tr>
-      <td>אוטומטי (Auto-enable)</td>
-      <td>סימון ה-checkbox בתפריט מוסיף משתנה סביבה קבוע ל-user profile. מעכשיו <strong>כל</strong> פתיחה של Word מתחילה עם RTL מופעל. set-it-and-forget-it</td>
-      <td>למי שעובד קבוע עם Claude בעברית ורוצה שהכל יעבוד אוטומטית</td>
-    </tr>
-  </tbody>
-</table>
+<h3>אקטיבציה דרך Connect</h3>
 
 <p>
-<strong>גילוי נאות על Auto-enable:</strong> המשתנה שנוסף הוא
-<code>WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS</code> ברמת <code>HKCU\Environment</code>.
-WebView2 הוא רכיב משותף, ולכן המשתנה נקרא <em>גם</em> על ידי אפליקציות
-WebView2 אחרות שפועלות תחת אותו user - כמו Teams, Outlook (new), וחלונות
-Edge WebView אחרים. בפועל אף אחת מהן לא מאזינה ל-debug port על
-<code>9222</code>, אבל המשתנה כן נקרא על ידן וזה משהו שנכון לדעת. אם
-לא מקובל עליכם - השאירו את ה-Auto-enable כבוי והשתמשו ב-Connect ידני.
-את ה-checkbox אפשר לכבות בכל רגע מהתפריט והמשתנה ינוקה.
+החל מ-v0.1.4 ה-Auto-enable הקבוע הוסר לחלוטין. הסיבה: הוא דרש כתיבה
+של <code>WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS</code> ברמת
+<code>HKCU\Environment</code>, משתנה שנקרא על ידי <em>כל</em> תהליך WebView2
+שרץ תחת אותו user (Teams, Outlook, Edge WebView, OneDrive UI). מערכות
+EDR ארגוניות (Microsoft Defender for Endpoint, CrowdStrike Falcon,
+SentinelOne, Sophos) מסמנות שינויים במשתנה הזה כסיגנל לגניבת אישורים,
+ובמקרה אחד בשטח זה גרם להן לבצע host isolation אוטומטי על מכונה מנוהלת.
+מ-v0.2.0 התמונה זהה: אין משתנה סביבה קבוע, אין checkbox, אין prompt
+במתקין.
 </p>
 
 <p>
-ב-uninstall, ה-Auto-enable מנוקה אוטומטית - אבל רק אם הערך של המשתנה
-תואם בדיוק לזה שלנו. ערך שמשתמש הוסיף ידנית לא נמחק.
+במקום זאת, האקטיבציה כולה עוברת דרך <strong>Connect</strong> בתפריט
+הטריי. כל לחיצה על Connect Word/Excel/PowerPoint קוראת ל-wrapper
+הייעודי של אותה אפליקציה
+(<code>word-wrapper.bat</code>, <code>excel-wrapper.bat</code>,
+<code>powerpoint-wrapper.bat</code>), שמגדיר את משתנה ה-WebView2 רק
+ב-process scope של עצמו וירש על ידי האפליקציה שהוא מפעיל. תהליכים
+אחרים של WebView2 על המחשב לא רואים את המשתנה. כך השמירה על הפונקציונליות
+המקורית של Auto-enable (RTL בכל פתיחה רלוונטית) מתבצעת בלי כתיבה
+ל-Registry שמסמנת אותנו ל-EDR.
 </p>
 
 <p>
-  <img src="docs/images/auto-enable-on-dialog.png" alt="דיאלוג הפעלת Auto-enable" width="420">
-  <img src="docs/images/auto-enable-off-dialog.png" alt="דיאלוג כיבוי Auto-enable" width="420">
-  <br>
-  <em>שני כיווני ה-toggle - הפעלה (מימין) וכיבוי (משמאל). הטקסט מסביר בכל כיוון מה ישתנה.</em>
+ב-uninstall, אם משתנה ה-Auto-enable הישן עדיין שם מגרסה v0.1.x, הוא
+מנוקה אוטומטית - אבל רק אם הערך של המשתנה תואם בדיוק לאחד מהערכים שלנו
+(<code>=9222</code> או <code>=0</code>). ערך שמשתמש הוסיף ידנית לא נמחק.
 </p>
 
 <h3>ניקוי טיפוגרפי</h3>
@@ -208,8 +207,7 @@ em-dash (—) ו-en-dash (–) מוחלפים ב-hyphen (-). חצים (→ ← �
 <p>
 <code>uninstall.bat</code> בארבעה שלבים: עוצר את ה-tray וה-injector, מסיר
 את ה-Startup entry ואת המפתח ב-<code>HKCU\...\Uninstall\ClaudeWordRTL</code>,
-מנקה את משתנה הסביבה של Auto-enable (אם הוא תואם לערך שלנו), ומפנק
-את התלויות. המטרה: להסיר את כל מה שההתקנה יצרה. ערכים שהמשתמש הגדיר
+מנקה את משתנה הסביבה הישן של Auto-enable (אם הוא תואם לערך שלנו - <code>=9222</code> או <code>=0</code>), ומסיר את התלויות. המטרה: להסיר את כל מה שההתקנה יצרה. ערכים שהמשתמש הגדיר
 ידנית באותו משתנה סביבה לא נמחקים.
 </p>
 
@@ -218,7 +216,7 @@ em-dash (—) ו-en-dash (–) מוחלפים ב-hyphen (-). חצים (→ ← �
 <h2 id="install">התקנה</h2>
 
 <p>
-<strong>דרישות:</strong> Windows 10/11, Microsoft Word desktop עם תוסף Claude מותקן.
+<strong>דרישות:</strong> Windows 10/11, Microsoft Office desktop (לפחות אחת מבין Word, Excel ו-PowerPoint) עם תוסף Claude מותקן.
 </p>
 
 <blockquote>
@@ -233,10 +231,9 @@ em-dash (—) ו-en-dash (–) מוחלפים ב-hyphen (-). חצים (→ ← �
 <ol>
   <li><strong>להתקין Node.js 16+</strong> אם עוד לא מותקן (ראו למעלה).</li>
   <li>להוריד זיפ מ-<a href="https://github.com/asaf-aizone/Claude-for-word-RTL-fix/releases">Releases</a>, או <code>git clone</code>.</li>
-  <li>לחלץ לתיקייה שתישמר (למשל <code>C:\Tools\claude-word-rtl\</code>).</li>
-  <li>לסגור את Word אם הוא פתוח.</li>
-  <li>דאבל-קליק על <strong><code>install.bat</code></strong>. בסיום הוא ישאל אם להפעיל <em>Auto-enable</em> - מומלץ Y.</li>
-  <li>אייקון ה-tray יעלה ליד השעון, ויעלה אוטומטית גם בלוגין הבא.</li>
+  <li>לחלץ לתיקייה שתישמר (למשל <code>C:\Tools\claude-office-rtl\</code>).</li>
+  <li>לסגור את Word/Excel/PowerPoint אם הם פתוחים.</li>
+  <li>דאבל-קליק על <strong><code>install.bat</code></strong>. ההתקנה רצה בארבעה שלבים בלי שאלות, ובסיומה אייקון ה-tray יעלה ליד השעון. הוא יעלה אוטומטית גם בלוגין הבא.</li>
 </ol>
 
 <p>
@@ -244,7 +241,7 @@ em-dash (—) ו-en-dash (–) מוחלפים ב-hyphen (-). חצים (→ ← �
 </p>
 
 <p>
-  <img src="docs/images/installer-done.png" alt="פלט install.bat בסיום מוצלח - Auto-enable מופעל, Stopped previous tray, Installation complete, ו-How to use" width="640">
+  <img src="docs/images/installer-done.png" alt="פלט install.bat בסיום מוצלח: 4 שלבים, ללא Auto-enable, ה-tray מתחיל אוטומטית" width="640">
 </p>
 
 <h3>עדכון לגרסה חדשה</h3>
@@ -270,40 +267,33 @@ em-dash (—) ו-en-dash (–) מוחלפים ב-hyphen (-). חצים (→ ← �
 <h2>שימוש יום-יומי</h2>
 
 <p>
-אחרי התקנה, האייקון עולה אוטומטית בכל לוגין.
+אחרי התקנה, האייקון עולה אוטומטית בכל לוגין. מצב העבודה היחיד מ-v0.2.0 הוא ידני (Connect לפי דרישה לכל אפליקציה):
 </p>
 
-<p><strong>מצב ידני (ברירת מחדל):</strong></p>
-
 <ol>
-  <li>פותחים את Word איך שרגילים - Start Menu, דאבל-קליק על <code>.docx</code>, Recent files.</li>
-  <li>אם האייקון <strong>אדום</strong> (ה-injector לא מחובר לפאנל): קליק ימני, <strong>Connect</strong>.</li>
-  <li>דיאלוג יקפוץ עם הסבר על מה שיקרה. אם יש מסמכים לא שמורים - תופיע אזהרה מפורשת. אישור סוגר את Word ומריץ אותו מחדש עם אותם מסמכים.</li>
-  <li>האייקון נהפך ל<strong>ירוק</strong>. הפאנל RTL.</li>
+  <li>פותחים את Word, Excel או PowerPoint איך שרגילים - Start Menu, דאבל-קליק על קובץ, Recent files.</li>
+  <li>קליק ימני על האייקון. שורת הסטטוס בראש התפריט תראה <code>running without RTL</code> לאפליקציה שפתוחה. בוחרים את <strong>Connect Word</strong>, <strong>Connect Excel</strong> או <strong>Connect PowerPoint</strong> בהתאם.</li>
+  <li>דיאלוג יקפוץ עם הסבר על מה שיקרה. אם יש מסמכים/חוברות עבודה/מצגות לא שמורים - תופיע אזהרה מפורשת. אישור סוגר את האפליקציה ומריץ אותה מחדש דרך ה-wrapper המתאים עם אותם קבצים.</li>
+  <li>שורת הסטטוס של אותה אפליקציה הופכת ל-<code>connected</code> והאייקון ל<strong>ירוק</strong>. הפאנל RTL. אפשר לחזור על אותו תהליך עבור שתי האפליקציות האחרות במקביל.</li>
 </ol>
 
 <p>
   <img src="docs/images/connect-dialog.png" alt="דיאלוג האישור של Connect - עם אזהרת UNSAVED" width="500">
 </p>
 
-<p><strong>מצב אוטומטי (Auto-enable מסומן):</strong></p>
-
-<ol>
-  <li>פותחים את Word איך שרגילים. זהו.</li>
-  <li>האייקון בתפריט הופך לירוק תוך שניות, הפאנל כבר RTL.</li>
-  <li>בפועל אין צורך לפתוח את התפריט - האייקון משמש כאינדיקטור סטטוס בלבד.</li>
-</ol>
-
 <hr>
 
 <h2>איך זה עובד?</h2>
 
 <p>
-<code>word-wrapper.bat</code> מריץ את Word עם משתנה סביבה
-<code>WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222</code>.
-זה flag רשמי של Microsoft שפותח Chrome DevTools Protocol ב-<code>localhost:9222</code>.
-תהליך Node קטן (<code>scripts/inject.js</code>) מתחבר דרך WebSocket מקומי,
-מאתר את ה-page שה-URL שלו תואם לפאנל של Claude, ומריץ <code>Runtime.evaluate</code>
+לכל אפליקציית Office יש wrapper משלה (<code>word-wrapper.bat</code>,
+<code>excel-wrapper.bat</code>, <code>powerpoint-wrapper.bat</code>). ה-wrapper מריץ את האפליקציה עם משתנה סביבה
+<code>WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=0</code>.
+זה flag רשמי של Microsoft שפותח Chrome DevTools Protocol ב-localhost על
+פורט דינמי. הערך <code>0</code> מאפשר ל-WebView2 לבחור פורט פנוי משלו לכל
+תהליך, מה שנדרש כדי שכמה אפליקציות Office תוכלנה לרוץ בו-זמנית בלי
+התנגשויות (בגרסת v0.1.x הפורט היה <code>9222</code> קבוע, מה שלא הספיק
+לכמה תהליכים יחד). תהליך Node יחיד (<code>scripts/inject.js</code>) משתמש ב-<code>scripts/port-discovery.js</code> כדי לסרוק כל tick את כל תהליכי <code>msedgewebview2.exe</code> דרך <code>tasklist</code>, למפות אותם ל-LISTENING ports דרך <code>netstat</code>, ולבדוק כל פורט מועמד מול <code>/json/list</code> של CDP. עבור כל target הוא מזהה את האפליקציה דרך הפרמטר <code>_host_Info=</code> ב-URL של הפאנל, מתחבר דרך WebSocket, ומריץ <code>Runtime.evaluate</code>
 כדי להזריק <code>&lt;style&gt;</code> ו-MutationObserver. לולאה של שתי שניות מזריקה מחדש
 אם הפאנל טוען את עצמו.
 </p>
@@ -315,8 +305,8 @@ Anthropic כמו תמיד - ה-wrapper פשוט מוסיף flag ל-WebView2 ומ
 
 <p>
 ה-Connect לא תוקע את ה-UI: התפריט נסגר מיד, וה-state machine ממשיך ברקע
-דרך timer. אם Word לא נסגר תוך 10 שניות, מופיע דיאלוג OK/Cancel - OK
-מחסל את התהליך ומריץ מחדש, Cancel משאיר את Word כפי שהוא.
+דרך timer. אם האפליקציה לא נסגרת תוך 10 שניות, מופיע דיאלוג OK/Cancel - OK
+מחסל את התהליך ומריץ מחדש, Cancel משאיר את האפליקציה כפי שהיא.
 </p>
 
 <p>
@@ -333,44 +323,45 @@ Anthropic כמו תמיד - ה-wrapper פשוט מוסיף flag ל-WebView2 ומ
   </thead>
   <tbody>
     <tr>
-      <td>WebView2 של Word</td>
-      <td>קריאה דרך Chrome DevTools Protocol על <code>localhost:9222</code></td>
-      <td>לאתר את הפאנל של Claude ולהזריק CSS</td>
+      <td>WebView2 של Word/Excel/PowerPoint</td>
+      <td>קריאה דרך Chrome DevTools Protocol על localhost בפורט דינמי לכל אפליקציה</td>
+      <td>לאתר את הפאנל של Claude בכל אחת משלוש האפליקציות ולהזריק CSS</td>
     </tr>
     <tr>
       <td>משתנה סביבה <code>WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS</code></td>
-      <td>במצב ידני: כתיבה בהקשר ה-wrapper בלבד. במצב Auto-enable: כתיבה קבועה ב-<code>HKCU\Environment</code></td>
-      <td>לפתוח את ה-debug port ב-WebView2 ברגע הפעלה של Word. במצב Auto-enable - לכל פתיחה עתידית</td>
+      <td>כתיבה רק ב-process scope של ה-wrapper הרלוונטי (Word/Excel/PowerPoint), שיורש לאפליקציה שהוא מפעיל. <strong>אין כתיבה ל-<code>HKCU\Environment</code></strong> מ-v0.1.4 ואילך</td>
+      <td>לפתוח את ה-debug port ב-WebView2 ברגע הפעלה של אפליקציית Office. תהליכים אחרים של WebView2 לא רואים את המשתנה</td>
     </tr>
     <tr>
       <td><code>%TEMP%</code></td>
-      <td>כתיבה של PID ו-status של ה-injector</td>
-      <td>למעקב אחר מצב ההזרקה מה-tray ומניעת mass-kill של תהליכי Node</td>
+      <td>כתיבה של PID, סטטוס מצרפי (<code>claude-word-rtl.status</code>) וסטטוס לפי אפליקציה (<code>claude-office-rtl.apps.json</code>) של ה-injector</td>
+      <td>למעקב אחר מצב ההזרקה מה-tray, להציג שלוש שורות סטטוס בתפריט, ולמנוע mass-kill של תהליכי Node</td>
     </tr>
     <tr>
       <td>Startup folder של המשתמש</td>
-      <td>יצירת קיצור אחד לכניסה</td>
+      <td>יצירת קיצור אחד לכניסה (<code>Claude for Word RTL Tray.lnk</code>; השם נשמר מ-v0.1.x לתאימות בעדכון)</td>
       <td>להפעיל את ה-tray אוטומטית בלוגין</td>
     </tr>
     <tr>
       <td><code>HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeWordRTL</code></td>
-      <td>כתיבה בהתקנה, מחיקה בהסרה</td>
+      <td>כתיבה בהתקנה, מחיקה בהסרה. <code>DisplayName</code> נשאר "Claude for Word RTL Fix" לתאימות בעדכון מ-v0.1.x</td>
       <td>רישום הכלי ב-Windows Settings &gt; Apps כדי שיופיע ברשימת Installed apps ויהיה ניתן להסרה משם</td>
     </tr>
     <tr>
-      <td>Microsoft Word (COM)</td>
-      <td>קריאה בלבד, רק בזמן Connect</td>
-      <td>למנות מסמכים פתוחים כדי לפתוח אותם מחדש אחרי relaunch</td>
+      <td>Word, Excel, PowerPoint (COM)</td>
+      <td>קריאה בלבד, רק בזמן Connect, עבור האפליקציה שעליה לחצו</td>
+      <td>למנות מסמכים/חוברות עבודה/מצגות פתוחים (<code>Documents</code>/<code>Workbooks</code>/<code>Presentations</code>) כדי לפתוח אותם מחדש אחרי relaunch</td>
     </tr>
   </tbody>
 </table>
 
 <p>
 <strong>בנוסף לטבלה למעלה, הכלי לא נוגע ב:</strong> file associations,
-<code>Normal.dotm</code>, תוספים אחרים של Word, או services.
-ב-registry הוא נוגע רק בשני המפתחות שבטבלה
-(<code>HKCU\...\Uninstall\ClaudeWordRTL</code> תמיד,
-ו-<code>HKCU\Environment</code> רק כש-Auto-enable פעיל).
+<code>Normal.dotm</code>, תבניות אחרות של Office, תוספים אחרים, או services.
+ב-registry הוא נוגע רק במפתח אחד שבטבלה
+(<code>HKCU\...\Uninstall\ClaudeWordRTL</code>). ב-v0.2.0 אין כתיבה
+ל-<code>HKCU\Environment</code>; ההתקנה וההסרה רק <em>מנקות</em> שם את משתנה
+ה-Auto-enable הישן אם הוא נשאר ממה-v0.1.x והערך תואם לאחד מהערכים שלנו.
 </p>
 
 <hr>
@@ -387,12 +378,12 @@ Anthropic כמו תמיד - ה-wrapper פשוט מוסיף flag ל-WebView2 ומ
 <h3>הערת אבטחה</h3>
 
 <p>
-כל עוד Word רץ דרך הכלי, WebView2 פותח debug port ב-<code>localhost:9222</code>.
+כל עוד אפליקציית Office (Word/Excel/PowerPoint) רצה דרך הכלי, ה-WebView2 שלה פותח debug port ב-localhost על פורט דינמי (אחד לכל תהליך WebView2 host של Office).
 ה-port לא חשוף לרשת, אבל תהליך מקומי באותו user יכול להתחבר אליו (זה
 המנגנון הסטנדרטי של Chrome DevTools Protocol; כל דפדפן מבוסס Chromium
-שפותח debug port מתנהג אותו דבר). בפועל, כמעט כל מה שרץ בסשן שלך יכול
-כבר לקרוא את הזיכרון של Word. השימוש ב-<strong>Disconnect</strong> מה-tray
-כשסיימתם מנקה את ה-port. על מחשבים משותפים או לא מהימנים - אל תריצו.
+שפותח debug port מתנהג אותו דבר). בפועל, כמעט כל מה שרץ בסשן שלכם יכול
+כבר לקרוא את הזיכרון של אפליקציית Office. השימוש ב-<strong>Disconnect all</strong> מה-tray
+כשסיימתם מנקה את ה-ports. על מחשבים משותפים או לא מהימנים - אל תריצו.
 </p>
 
 <p>
@@ -409,8 +400,8 @@ Anthropic כמו תמיד - ה-wrapper פשוט מוסיף flag ל-WebView2 ומ
 נוגעים בהם. עם זאת, כמו בכל כלי צד-שלישי - תנאי השימוש של Anthropic
 הם הקובעים, והאחריות על השימוש היא שלך.</p>
 
-<p><strong>מה הכלי עושה ל-Word?</strong><br>
-לא משנה את Word עצמו: בלי patch לתוסף, בלי שינוי טמפלטים, בלי
+<p><strong>מה הכלי עושה ל-Office?</strong><br>
+לא משנה את Word/Excel/PowerPoint עצמם: בלי patch לתוסף, בלי שינוי טמפלטים, בלי
 file associations. בהתקנה נוצרים קיצור בתיקיית Startup של המשתמש
 ומפתח תחת <code>HKCU\...\Uninstall\ClaudeWordRTL</code> (כדי שהכלי יופיע
 ב-Windows Settings &gt; Apps). שניהם מוסרים על ידי <code>uninstall.bat</code>,
@@ -426,14 +417,14 @@ file associations. בהתקנה נוצרים קיצור בתיקיית Startup �
 ישנו משהו משמעותי, התיקון הוא בדרך כלל עדכון של סלקטור אחד. תפתחו issue
 עם צילום מסך ונוציא patch.</p>
 
-<p><strong>Word Online? Mac? Microsoft 365 תאגידי עם EDR?</strong><br>
-Word Online - לא, הכלי דורש WebView2 של Word desktop. Mac - לא, Windows
+<p><strong>Office Online? Mac? Microsoft 365 תאגידי עם EDR?</strong><br>
+Office Online (Word Online, Excel Online, PowerPoint Online) - לא, הכלי דורש WebView2 של Office desktop. Mac - לא, Windows
 בלבד. תאגידי - לבדוק עם IT לפני הפעלה של debug port ב-Office. לא
-מיועד ל-laptops תאגידיים סגורים.</p>
+מיועד ל-laptops תאגידיים סגורים. ראו את האזהרה למחשבים מנוהלי-ארגון בראש הקובץ.</p>
 
-<p><strong>Word פתוח עם 10 מסמכים. Connect ייסגור אותם?</strong><br>
-כן, אבל בעדינות - Word מתבקש לשמור שינויים, מקבל את רשימת המסמכים דרך
-COM, וה-wrapper פותח את כולם מחדש. אם משהו לא נשמר, Word ישאל כרגיל.</p>
+<p><strong>Word/Excel/PowerPoint פתוחים עם הרבה קבצים. Connect ייסגור אותם?</strong><br>
+כן, אבל בעדינות - האפליקציה מתבקשת לשמור שינויים, הכלי מקבל את רשימת הקבצים הפתוחים דרך
+COM (לפי האפליקציה: <code>Documents</code>/<code>Workbooks</code>/<code>Presentations</code>), וה-wrapper פותח את כולם מחדש. אם משהו לא נשמר, האפליקציה תשאל כרגיל.</p>
 
 <p><strong>אין לי Git. אפשר בלי clone?</strong><br>
 כן. להוריד זיפ מ-Releases, לחלץ, להריץ <code>install.bat</code>.</p>
@@ -502,12 +493,8 @@ Chat או הפאנל של Claude ב-Word לא רואים את הקבצים הא�
       <td>ה-URL של הפאנל אולי השתנה. לפתוח issue עם צילום מסך של ה-URL ב-DevTools, ולצרף את <code>%TEMP%\claude-word-rtl.log</code></td>
     </tr>
     <tr>
-      <td>Auto-enable לא לוקח אפקט באפליקציה אחרת (Teams/Outlook)</td>
-      <td>צפוי. משתני סביבה נטענים בפתיחת תהליך. צריך לסגור ולפתוח מחדש את האפליקציה. שינוי משודר דרך <code>WM_SETTINGCHANGE</code> אבל לא משפיע על תהליכים שכבר רצים</td>
-    </tr>
-    <tr>
-      <td>הטריי נשאר אדום למרות ש-Auto-enable דלוק, Word פתוח, ו-Node מותקן</td>
-      <td>פורט 9222 אולי תפוס בידי אפליקציה אחרת. בודקים ב-cmd: <code>netstat -ano | findstr :9222</code>. אם רואים שורה עם PID שאינו של <code>WINWORD.EXE</code>, אפליקציה אחרת יושבת על הפורט. אשמים מוכרים: Google Drive File Stream, אפליקציות מבוססות Electron שמריצות עם <code>--remote-debugging-port=9222</code>, או WebView2 SDK tools. סוגרים את האפליקציה שתופסת את הפורט (לפי ה-PID וה-process name ב-Task Manager) ואז פותחים את Word מחדש דרך הטריי (Connect). מגרסה 0.1.3 ואילך ה-injector מטפל במקרה שבו גם Drive וגם Word יושבים על 9222 בו-זמנית בגלל IPv4/IPv6 split, אבל אם אף אחד לא מציע panel של Claude, אין מה לתפוס. <code>doctor.bat</code> של גרסה 0.1.3 מציג את זה בבירור בשתי הבדיקות החדשות.</td>
+      <td>RTL לא מופיע אחרי Connect</td>
+      <td>הריצו <code>doctor.bat</code>. הוא מבצע 15 בדיקות הכוללות סריקת פורטי CDP דינמיים פעילים של Office WebView2 דרך <code>tasklist</code> + <code>netstat</code>, וזיהוי targets של Claude לפי אפליקציה. בנוסף לוגים של ה-injector ב-<code>%TEMP%\claude-word-rtl.log</code> (נחתך בכל הפעלה) מציגים אילו ports נסרקו ואילו targets אותרו. אם <code>doctor.bat</code> מראה רשימת פורטים ריקה - האפליקציה לא נפתחה דרך ה-wrapper שלה (פתיחה ישירה מאייקון Word/Excel/PowerPoint לא מפעילה את ה-debug port). השתמשו ב-Connect המתאים מהטריי.</td>
     </tr>
   </tbody>
 </table>
@@ -517,10 +504,10 @@ Chat או הפאנל של Claude ב-Word לא רואים את הקבצים הא�
 <h2>מגבלות ידועות</h2>
 
 <ul>
-  <li>debug port ב-<code>localhost:9222</code> לא מאומת - כל תהליך מקומי באותו user יכול להתחבר. ראו "הערת אבטחה".</li>
+  <li>debug port של WebView2 ב-localhost (פורט דינמי) לא מאומת - כל תהליך מקומי באותו user יכול להתחבר. ראו "הערת אבטחה".</li>
   <li>Microsoft 365 תאגידי עם EDR/DLP יכול לחסום את דגל ה-WebView2. הכלי לא מיועד ללפטופים ארגוניים סגורים.</li>
   <li>עדכון של תוסף Claude שמחליף את ה-DOM יכול לשבור את ההזרקה עד patch. יישלח release מתוקן.</li>
-  <li><strong>Mac (macOS) לא נתמך ולא יהיה נתמך.</strong> Word ל-Mac משתמש ב-WKWebView במקום WebView2, ושכבת ה-launcher כולה (bat, vbs, ps1) היא Windows-only. Word Online גם לא נתמך.</li>
+  <li><strong>Mac (macOS) לא נתמך ולא יהיה נתמך.</strong> Office ל-Mac משתמש ב-WKWebView במקום WebView2, ושכבת ה-launcher כולה (bat, vbs, ps1) היא Windows-only. Office Online (Word/Excel/PowerPoint Online) גם לא נתמך.</li>
   <li>גרסאות של תוסף Claude שלא משתמשות ב-WebView2 (למשל Electron עצמאי) - לא נתמכות.</li>
 </ul>
 
@@ -550,8 +537,8 @@ Issues ו-PRs מתקבלים בברכה. לבאגים של תצוגה - selector
 
 <p>
 כלי open-source עצמאי. לא מסונף ל-Anthropic או Microsoft, לא מאושר על ידן,
-ולא מכיל קוד שלהן. "Claude" סימן מסחרי של Anthropic, PBC. "Microsoft"
-ו-"Word" סימנים מסחריים של Microsoft Corporation.
+ולא מכיל קוד שלהן. "Claude" סימן מסחרי של Anthropic, PBC. "Microsoft",
+"Word", "Excel" ו-"PowerPoint" סימנים מסחריים של Microsoft Corporation.
 </p>
 
 <h2>מסמכים נוספים</h2>
@@ -574,20 +561,20 @@ Issues ו-PRs מתקבלים בברכה. לבאגים של תצוגה - selector
 <details>
 <summary><strong>English version</strong></summary>
 
-<h1>Claude for Word RTL Fix</h1>
+<h1>Claude for Office RTL Fix (Word, Excel, PowerPoint)</h1>
 
 <p>
-RTL fix for the Claude panel in Microsoft Word. Local-only, no telemetry, Apache 2.0.
+RTL fix for the Claude panel in Microsoft Word, Excel, and PowerPoint. Local-only, no telemetry, Apache 2.0.
 </p>
 
 <p>
-<strong>Not an official Anthropic or Microsoft add-in.</strong> Independent open-source tool.
+<strong>Not an official Anthropic or Microsoft add-in.</strong> Independent open-source tool. The GitHub repository is still named <code>Claude-for-word-RTL-fix</code> (lowercase "word") for upgrade compatibility with v0.1.x; only the displayed product name changed in v0.2.0.
 </p>
 
 <blockquote>
 <p>
 <strong>Windows only.</strong> This tool does not work on macOS or Linux. The Claude
-Word add-in is built on Microsoft's WebView2 runtime, which is Windows-only. Word
+add-in for Office is built on Microsoft's WebView2 runtime, which is Windows-only. Office
 for Mac uses WKWebView, which does not expose the same debugging interface, and the
 entire launcher stack (batch, VBS, PowerShell, registry, Startup folder) is
 Windows-specific. If you are on Mac, this tool has no port.
@@ -597,12 +584,12 @@ Windows-specific. If you are on Mac, this tool has no port.
 <h2>What it does</h2>
 
 <p>
-Anthropic's official Claude add-in for Word doesn't render Hebrew right-to-left.
+Anthropic's official Claude add-in for Office (Word, Excel, PowerPoint) doesn't render Hebrew right-to-left.
 Bullets land on the wrong side, alignment is reversed, punctuation ends up in
-weird places. This tool attaches to the add-in's WebView2 panel via Chrome
+weird places. This tool attaches to each Office app's WebView2 panel via Chrome
 DevTools Protocol, injects a small stylesheet plus a MutationObserver, and
-flips the panel to correct RTL. The Claude model, the Anthropic API, and Word
-itself are untouched - only the panel's local DOM, and only while the panel
+flips the panel to correct RTL. The Claude model, the Anthropic API, and the Office apps
+themselves are untouched - only the panel's local DOM, and only while the panel
 is open.
 </p>
 
@@ -618,15 +605,15 @@ injector. The underlying Service is not changed in any way.
 <h2>Features</h2>
 
 <ul>
-  <li><strong>Instant RTL</strong> - direction, alignment, bullets, tables. <code>&lt;pre&gt;</code> and <code>&lt;code&gt;</code> stay LTR so source code isn't corrupted.</li>
-  <li><strong>Tray-icon control</strong> - a small rounded-square icon near the clock: a white <strong>W</strong> and an RTL arrow on a status-colored background. Gray = starting. Red = not attached. Green = panel is RTL. Right-click for Connect / Disconnect / Auto-enable / Show diagnostic log / Check for updates / Uninstall / Exit. No Start Menu entry pretending to be Word. See the <a href="docs/images/tray-icon-red.png">red (disconnected)</a> and <a href="docs/images/tray-icon-green.png">green (connected)</a> states.</li>
-  <li><strong>Two modes</strong> - Manual (click Connect each time) or Auto-enable (set-it-and-forget-it). See "Auto-enable" below for the trade-off.</li>
-  <li><strong>Non-blocking Connect</strong> - the menu closes immediately, work proceeds on a background timer state machine. If Word doesn't close within 10 seconds, an OK/Cancel dialog offers force-kill or abort.</li>
-  <li><strong>Minimal footprint</strong> - no file associations, no <code>Normal.dotm</code> changes, no templates, no services. Install creates two per-user items: a Startup-folder shortcut (so the tray auto-launches at login) and an <code>HKCU\...\Uninstall\ClaudeWordRTL</code> registry key (so the tool appears in Windows Settings &gt; Apps). Both are removed by <code>uninstall.bat</code>.</li>
-  <li><strong>Hebrew typography cleanup</strong> - em-dash (—) and en-dash (–) become hyphen (-). Arrows (→ ← ↔ ⇒ ⇐) become commas. Input fields are left alone.</li>
+  <li><strong>Instant RTL across Word, Excel, and PowerPoint</strong> - direction, alignment, bullets, tables. <code>&lt;pre&gt;</code> and <code>&lt;code&gt;</code> stay LTR so source code isn't corrupted. One injector serves all three apps; you can have all of them open simultaneously with the panel RTL in each.</li>
+  <li><strong>Tray-icon control</strong> - a small rounded-square icon near the clock: a white <strong>O</strong> (Office) and an RTL arrow on a status-colored background. Gray = starting. Red = not attached. Green = at least one Office app is connected with RTL. Right-click for three per-app status labels (Word/Excel/PowerPoint), three Connect items (Connect Word / Connect Excel / Connect PowerPoint), Disconnect all, Show diagnostic log, Check for updates, Uninstall, Exit. No Start Menu entry pretending to be Word. See the <a href="docs/images/tray-icon-red.png">red (disconnected)</a> and <a href="docs/images/tray-icon-green.png">green (connected)</a> states.</li>
+  <li><strong>Per-process activation</strong> - Connect Word/Excel/PowerPoint each launches the matching Office app through its wrapper, with the WebView2 debug flag set in the wrapper's process scope only. The flag is inherited by Office but never seen by Teams, Outlook, Edge, or any other WebView2 host on your account.</li>
+  <li><strong>Non-blocking Connect</strong> - the menu closes immediately, work proceeds on a background timer state machine. If the Office app doesn't close within 10 seconds, an OK/Cancel dialog offers force-kill or abort.</li>
+  <li><strong>Minimal footprint</strong> - no file associations, no <code>Normal.dotm</code> changes, no Office templates, no services. Install creates two per-user items: a Startup-folder shortcut (so the tray auto-launches at login; filename <code>Claude for Word RTL Tray.lnk</code> retained for v0.1.x upgrade compat) and an <code>HKCU\...\Uninstall\ClaudeWordRTL</code> registry key (so the tool appears in Windows Settings &gt; Apps). Both are removed by <code>uninstall.bat</code>.</li>
+  <li><strong>Hebrew typography cleanup</strong> - em-dash and en-dash become hyphen. Arrow glyphs become commas. Input fields and code blocks are left alone.</li>
   <li><strong>Crash-safe status</strong> - if the injector dies without cleanup, the tray detects stale state (process + status-file timestamp) and flips to red, to reduce cases where the icon shows green without an actual connection.</li>
-  <li><strong>Diagnostic log</strong> - <code>%TEMP%\claude-word-rtl.log</code>, accessible from the tray menu. Truncated on each injector start. Shows discovered CDP targets, attach events, errors.</li>
-  <li><strong>Clean uninstall</strong> - 4-step <code>uninstall.bat</code>: stop tray/injector, remove Startup entry + <code>HKCU\...\Uninstall\ClaudeWordRTL</code>, clear Auto-enable env var (only if it still matches our exact value - user-modified values are preserved), prune deps. Aims to remove everything the installer created.</li>
+  <li><strong>Diagnostic log</strong> - <code>%TEMP%\claude-word-rtl.log</code>, accessible from the tray menu. Truncated on each injector start. Shows discovered Office CDP ports, per-target app identification, attach events, errors.</li>
+  <li><strong>Clean uninstall</strong> - 4-step <code>uninstall.bat</code>: stop tray/injector, remove Startup entry + <code>HKCU\...\Uninstall\ClaudeWordRTL</code>, clear any v0.1.x legacy Auto-enable env var (only if it still matches one of our known values, <code>=9222</code> or <code>=0</code>; user-modified values are preserved), prune deps. Aims to remove everything the installer created.</li>
 </ul>
 
 <h3>Tray menu</h3>
@@ -636,9 +623,11 @@ injector. The underlying Service is not changed in any way.
     <tr><th>Item</th><th>When available</th><th>What it does</th></tr>
   </thead>
   <tbody>
-    <tr><td>Connect (relaunch Claude for Word RTL Fix)</td><td>Icon is red</td><td>Relaunches Word through the wrapper with the debug-port enabled. If Word is already open, saves documents, asks for confirmation, and reopens them. Non-blocking - menu closes immediately.</td></tr>
-    <tr><td>Disconnect (close Claude for Word RTL Fix)</td><td>Anytime</td><td>Universal recovery button. Stops any in-flight Connect timers, closes Word (graceful + force fallback), kills the injector, cleans up state files. If anything went wrong, clicking this always returns to a clean slate.</td></tr>
-    <tr><td>Auto-enable at every Word launch (checkbox)</td><td>Anytime</td><td>Persists <code>WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS</code> in <code>HKCU\Environment</code> so every future Word launch starts with RTL. See Auto-enable section for caveats.</td></tr>
+    <tr><td>Word: ... / Excel: ... / PowerPoint: ...</td><td>Always (three disabled labels at the top)</td><td>Read-only per-app status labels. Each can read <code>connected</code>, <code>not running</code>, <code>running without RTL</code>, or <code>error</code>. Refreshed every 2s from <code>%TEMP%\claude-office-rtl.apps.json</code>.</td></tr>
+    <tr><td>Connect Word</td><td>Anytime</td><td>Relaunches Word through <code>word-wrapper.bat</code> with the debug-port enabled (dynamic port). If Word is already open, enumerates documents via <code>Word.Application</code> COM, asks for confirmation, and reopens them.</td></tr>
+    <tr><td>Connect Excel</td><td>Anytime</td><td>Same flow for Excel via <code>excel-wrapper.bat</code>; enumerates <code>Workbooks</code>.</td></tr>
+    <tr><td>Connect PowerPoint</td><td>Anytime</td><td>Same flow for PowerPoint via <code>powerpoint-wrapper.bat</code>; enumerates <code>Presentations</code>.</td></tr>
+    <tr><td>Disconnect all</td><td>Anytime</td><td>Universal recovery button across all three apps. Stops any in-flight Connect timers, closes every open Office app (graceful + force fallback), kills the injector, cleans up state files. If anything went wrong, clicking this always returns to a clean slate.</td></tr>
     <tr><td>Show diagnostic log</td><td>Anytime</td><td>Opens <code>%TEMP%\claude-word-rtl.log</code> in the default editor.</td></tr>
     <tr><td>Check for updates...</td><td>Anytime</td><td>Runs <code>check-update.js</code> and shows the result in a dialog. When a newer release exists, a one-click button opens the download page in the default browser.</td></tr>
     <tr><td>Uninstall...</td><td>Anytime</td><td>Runs <code>uninstall.bat</code> after confirmation.</td></tr>
@@ -646,28 +635,42 @@ injector. The underlying Service is not changed in any way.
   </tbody>
 </table>
 
-<h3>Auto-enable: the trade-off</h3>
+<h3>Activation via Connect (no persistent env var)</h3>
 
 <p>
-Auto-enable persists the WebView2 debug-port flag at user level. The
-variable name is <code>WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS</code>, and it's
-read by every WebView2 host running under your user - Teams, the new
-Outlook, Edge WebView windows, and any other WebView2-based app. In
-practice most of them do not actually bind the debug port on
-<code>9222</code>, but the variable is still read by them and that's worth
-knowing. Uncheck the menu item at any time to remove it.
+v0.1.4 removed the persistent Auto-enable toggle and v0.2.0 keeps it
+removed. The reason: Auto-enable wrote
+<code>WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS</code> at <code>HKCU\Environment</code> level,
+which is read by <em>every</em> WebView2 host running under your user (Teams,
+the new Outlook, Edge WebView, the OneDrive UI). Enterprise EDR products
+(Microsoft Defender for Endpoint, CrowdStrike Falcon, SentinelOne,
+Sophos) treat unexpected modifications of WebView2 browser arguments as
+a credential-theft signal, and a v0.1.x field incident triggered host
+isolation on a managed device.
 </p>
 
 <p>
-If that's not acceptable, leave Auto-enable off and use manual Connect.
-On uninstall, the variable is cleared only if its value still matches
-exactly what we wrote - any user-modified value is preserved.
+v0.2.0 keeps activation Connect-only. Each Connect Word/Excel/PowerPoint
+click invokes the matching wrapper
+(<code>word-wrapper.bat</code>, <code>excel-wrapper.bat</code>,
+<code>powerpoint-wrapper.bat</code>), which sets the WebView2 debug flag in
+its own process scope. The flag is inherited only by the Office app the
+wrapper launches, and is invisible to any other WebView2 host on the
+account. The functional behavior of the old Auto-enable toggle (RTL
+ready every time you open Office) is preserved without writing to the
+registry.
+</p>
+
+<p>
+On uninstall, if a v0.1.x Auto-enable env var is still set, it's cleared
+only if its value matches one of our known strings (<code>=9222</code>
+or <code>=0</code>); any user-modified value is preserved.
 </p>
 
 <h2 id="install-en">Install</h2>
 
 <p>
-<strong>Requirements:</strong> Windows 10/11, Microsoft Word desktop with Claude
+<strong>Requirements:</strong> Windows 10/11, Microsoft Office desktop (at least one of Word, Excel, PowerPoint) with Claude
 add-in installed.
 </p>
 
@@ -684,10 +687,9 @@ and run <code>node --version</code> - you should see <code>v16</code> or higher.
 <ol>
   <li><strong>Install Node.js 16+</strong> if you don't have it already (see above).</li>
   <li>Download the zip from <a href="https://github.com/asaf-aizone/Claude-for-word-RTL-fix/releases">Releases</a> or <code>git clone</code>.</li>
-  <li>Extract to a folder you'll keep (e.g. <code>C:\Tools\claude-word-rtl\</code>).</li>
-  <li>Close Word if it's open.</li>
-  <li>Double-click <strong><code>install.bat</code></strong>. At the end it will ask whether to turn on <em>Auto-enable</em> - Y is recommended.</li>
-  <li>Tray icon appears near the clock, and will launch automatically on every login.</li>
+  <li>Extract to a folder you'll keep (e.g. <code>C:\Tools\claude-office-rtl\</code>).</li>
+  <li>Close Word, Excel, and PowerPoint if any of them are open.</li>
+  <li>Double-click <strong><code>install.bat</code></strong>. The installer runs 4 steps with no prompts; the tray icon appears near the clock when it finishes, and will launch automatically on every login.</li>
 </ol>
 
 <p>Logs go to <code>install.log</code> next to the installer. No admin rights needed.</p>
@@ -701,7 +703,7 @@ Then:
 </p>
 <ol>
   <li>Extract the zip over your install folder (overwriting all files).</li>
-  <li>Close Word.</li>
+  <li>Close Word, Excel, and PowerPoint.</li>
   <li>Run <code>install.bat</code> again. It stops the old tray and
       injector and starts the new ones with the updated code.</li>
 </ol>
@@ -712,27 +714,37 @@ Then:
 <h2>Daily use</h2>
 
 <ol>
-  <li>Open Word the way you always do - Start Menu, double-click a <code>.docx</code>, Recent files.</li>
-  <li>If the icon is <strong>red</strong>: right-click, <strong>Connect</strong>.</li>
-  <li>The tool enumerates your open documents, asks for confirmation, reopens them.</li>
-  <li>Icon turns <strong>green</strong>. Panel is RTL.</li>
+  <li>Open Word, Excel, or PowerPoint the way you always do - Start Menu, double-click a file, Recent files.</li>
+  <li>Right-click the tray icon. The status label at the top of the menu for that app will read <code>running without RTL</code>. Pick <strong>Connect Word</strong>, <strong>Connect Excel</strong>, or <strong>Connect PowerPoint</strong> as appropriate.</li>
+  <li>The tool enumerates your open documents/workbooks/presentations, asks for confirmation, reopens them through the matching wrapper.</li>
+  <li>The status label flips to <code>connected</code> and the icon goes <strong>green</strong>. Panel is RTL. Repeat for the other apps if you have them open in parallel.</li>
 </ol>
 
 <h2>How it works</h2>
 
 <p>
-<code>word-wrapper.bat</code> launches Word with
-<code>WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=9222</code>,
-a Microsoft-documented flag that exposes Chrome DevTools Protocol on
-<code>localhost:9222</code>. A small Node process (<code>scripts/inject.js</code>) connects
-over the local WebSocket, finds the page whose URL matches the Claude panel,
-and calls <code>Runtime.evaluate</code> to inject a <code>&lt;style&gt;</code> element and
-a MutationObserver. A 2-second poll re-injects if the panel reloads.
+Each Office app has its own wrapper (<code>word-wrapper.bat</code>,
+<code>excel-wrapper.bat</code>, <code>powerpoint-wrapper.bat</code>). The wrapper launches the
+Office app with
+<code>WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=0</code>,
+a Microsoft-documented WebView2 flag. The value <code>0</code> means
+"WebView2 picks a free dynamic port per process", so multiple Office apps
+launched through their respective wrappers each get their own debug
+surface without colliding (v0.1.x used a fixed <code>9222</code>, which
+prevented multi-app support). A single Node process (<code>scripts/inject.js</code>)
+uses <code>scripts/port-discovery.js</code> on every 2-second tick to enumerate
+the active CDP surfaces: walk <code>tasklist</code> for
+<code>msedgewebview2.exe</code> PIDs, map each PID to its LISTENING port via
+<code>netstat</code>, and probe every candidate's <code>/json/list</code>. For each
+Claude target it identifies the app from the <code>_host_Info=</code> URL
+parameter (Word, Excel, or Powerpoint), opens a WebSocket to that
+target's CDP endpoint, and calls <code>Runtime.evaluate</code> to inject a
+<code>&lt;style&gt;</code> element and a MutationObserver.
 </p>
 
 <p>
 All activity is local. The only outbound traffic is normal Claude-to-Anthropic
-traffic, unchanged, routed by Word itself.
+traffic, unchanged, routed by Office itself.
 </p>
 
 <p>Full threat model: <a href="docs/security.md"><code>docs/security.md</code></a>.</p>
@@ -745,44 +757,46 @@ traffic, unchanged, routed by Word itself.
   </thead>
   <tbody>
     <tr>
-      <td>Word's WebView2</td>
-      <td>Read via Chrome DevTools Protocol on <code>localhost:9222</code></td>
-      <td>Locate the Claude panel and inject CSS</td>
+      <td>WebView2 of Word/Excel/PowerPoint</td>
+      <td>Read via Chrome DevTools Protocol on a localhost dynamic port (one per Office WebView2 host)</td>
+      <td>Locate the Claude panel in each app and inject CSS</td>
     </tr>
     <tr>
       <td><code>WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS</code> env var</td>
-      <td>Manual mode: written in the wrapper's context only. Auto-enable mode: persisted in <code>HKCU\Environment</code></td>
-      <td>Open the debug port at Word launch (or for every future WebView2 host launch when Auto-enable is on)</td>
+      <td>Wrapper process scope only. Each wrapper sets the variable just for itself; the launched Office app inherits it. <strong>Never written to <code>HKCU\Environment</code></strong> in v0.1.4 or v0.2.0</td>
+      <td>Open the WebView2 debug port at Office-app launch. Other WebView2 hosts on the account never see the flag</td>
     </tr>
     <tr>
       <td><code>%TEMP%</code></td>
-      <td>Writes injector PID and status</td>
-      <td>Track injection state from the tray, prevent mass-kill of Node processes</td>
+      <td>Writes injector PID, aggregate status (<code>claude-word-rtl.status</code>) and per-app status (<code>claude-office-rtl.apps.json</code>)</td>
+      <td>Track injection state from the tray, render per-app status labels, prevent mass-kill of Node processes</td>
     </tr>
     <tr>
       <td>User Startup folder</td>
-      <td>Creates one shortcut</td>
+      <td>Creates one shortcut (<code>Claude for Word RTL Tray.lnk</code>; filename retained for v0.1.x upgrade compat)</td>
       <td>Launch the tray at login</td>
     </tr>
     <tr>
       <td><code>HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeWordRTL</code></td>
-      <td>Written on install, removed on uninstall</td>
+      <td>Written on install, removed on uninstall. <code>DisplayName</code> still "Claude for Word RTL Fix" for v0.1.x upgrade compat</td>
       <td>Register the tool in Windows Settings &gt; Apps &gt; Installed apps so it can be uninstalled from there</td>
     </tr>
     <tr>
-      <td>Microsoft Word (COM)</td>
-      <td>Read-only, only during Connect</td>
-      <td>Enumerate open documents to reopen them after relaunch</td>
+      <td>Word, Excel, PowerPoint (COM)</td>
+      <td>Read-only, only during Connect, only for the app you clicked</td>
+      <td>Enumerate open documents/workbooks/presentations (<code>Documents</code> / <code>Workbooks</code> / <code>Presentations</code>) to reopen them after relaunch</td>
     </tr>
   </tbody>
 </table>
 
 <p>
 <strong>Beyond the table above, the tool does not touch:</strong> file
-associations, <code>Normal.dotm</code>, other Word add-ins, or Windows
-services. The only registry keys it writes are the two in the table
-(<code>HKCU\...\Uninstall\ClaudeWordRTL</code> always, and
-<code>HKCU\Environment</code> only when Auto-enable is on).
+associations, <code>Normal.dotm</code>, any Word/Excel/PowerPoint template,
+other Office add-ins, or Windows services. The only registry key it
+writes is the one in the table (<code>HKCU\...\Uninstall\ClaudeWordRTL</code>).
+v0.2.0 does not write <code>HKCU\Environment</code>; install and uninstall
+only <em>clear</em> the legacy Auto-enable env var there if it remains
+from v0.1.x and matches one of our known values.
 </p>
 
 <h2>Privacy</h2>
@@ -796,10 +810,11 @@ services. The only registry keys it writes are the two in the table
 
 <h3>Security note</h3>
 <p>
-While Word runs via this tool, WebView2 opens a debug port on
-<code>localhost:9222</code>. Any local process on the same user can connect and
-read the panel's DOM. The port is localhost-only, but unauthenticated.
-Use <strong>Disconnect</strong> when done. Don't run on shared or untrusted machines.
+While an Office app (Word, Excel, or PowerPoint) runs via this tool,
+its WebView2 host opens a debug port on a dynamic localhost port
+(one per Office WebView2 host process). Any local process on the same user
+can connect and read the panel's DOM. The port is localhost-only, but unauthenticated.
+Use <strong>Disconnect all</strong> when done. Don't run on shared or untrusted machines.
 </p>
 
 <h2>FAQ</h2>
@@ -813,8 +828,8 @@ send to Claude or what Claude sends back; it only restyles Claude's
 already-rendered output in your local browser. If Anthropic's terms ever change
 to restrict client-side modifications, comply with their terms over this tool.</p>
 
-<p><strong>Does it modify Word?</strong><br>
-It doesn't modify Word itself: no template changes, no add-in patches, no
+<p><strong>Does it modify Office?</strong><br>
+It doesn't modify Word, Excel, or PowerPoint themselves: no template changes, no add-in patches, no
 file-association changes. Install does create two per-user items: a
 Startup-folder shortcut and an <code>HKCU\...\Uninstall\ClaudeWordRTL</code>
 registry key (so the tool appears in Windows Settings &gt; Apps). Both are
@@ -829,15 +844,15 @@ Possibly. The injector depends on the panel's DOM structure and URL pattern.
 If Anthropic ships a significant change, the fix is usually a one-selector
 update. Open an issue with a screenshot.</p>
 
-<p><strong>Word Online, Mac, corporate M365 with EDR?</strong><br>
-Word Online - no, requires Word desktop's WebView2. Mac - no, Windows only.
-Corporate - check with your IT team before enabling a WebView2 debug port.
-Not intended for sealed corporate laptops.</p>
+<p><strong>Office Online, Mac, corporate M365 with EDR?</strong><br>
+Office Online (Word/Excel/PowerPoint Online) - no, requires Office desktop's WebView2. Mac - no, Windows only.
+Corporate - check with your IT team before enabling a WebView2 debug port on Office.
+Not intended for sealed corporate laptops; see the EDR warning at the top of this README.</p>
 
-<p><strong>Word is open with 10 documents. Will Connect close them?</strong><br>
-Yes, gracefully. Word is asked to save changes, the document list is captured
-via COM, and the wrapper reopens all of them. If something wasn't saved,
-Word will prompt as usual.</p>
+<p><strong>Word, Excel, or PowerPoint is open with many files. Will Connect close them?</strong><br>
+Yes, gracefully. The Office app is asked to save changes, the open-files list is captured
+via the matching COM collection (<code>Documents</code>/<code>Workbooks</code>/<code>Presentations</code>),
+and the wrapper reopens all of them. If something wasn't saved, the app prompts as usual.</p>
 
 <p><strong>How do I check for a newer version?</strong><br>
 Run <code>check-update.bat</code> or use the tray menu's "Check for updates..." item.
@@ -905,12 +920,8 @@ errors. 90% of issues are obvious from there.
       <td>The panel URL may have changed. Open an issue with a screenshot of the URL from DevTools and the diagnostic log</td>
     </tr>
     <tr>
-      <td>Auto-enable doesn't take effect in Teams/Outlook</td>
-      <td>Expected. Env vars load at process start. Close and reopen the app. <code>WM_SETTINGCHANGE</code> is broadcast but doesn't affect already-running processes</td>
-    </tr>
-    <tr>
-      <td>Tray stays red even with Auto-enable on, Word open, and Node installed</td>
-      <td>Port 9222 may be owned by another app. In cmd: <code>netstat -ano | findstr :9222</code>. If you see a row with a PID that is not <code>WINWORD.EXE</code>, another app is squatting on the port. Known offenders: Google Drive File Stream, Electron-based apps launched with <code>--remote-debugging-port=9222</code>, WebView2 SDK tools. Close the squatting app (find its PID in Task Manager), then reopen Word via tray, Connect. As of v0.1.3 the injector handles the common case where Drive and Word each bind a different family (IPv4 vs IPv6) of <code>localhost:9222</code>; but if Word is not actually exposing the Claude panel on 9222, there is nothing to attach to. <code>doctor.bat</code> as of v0.1.3 surfaces this directly in its two new checks.</td>
+      <td>RTL does not appear after Connect</td>
+      <td>Run <code>doctor.bat</code>. It performs 15 checks including a sweep of active Office WebView2 ports (via <code>tasklist</code> + <code>netstat</code>) and per-app Claude target enumeration. The injector log at <code>%TEMP%\claude-word-rtl.log</code> (truncated on each launch) shows which ports were probed and which targets matched. If <code>doctor.bat</code> reports an empty port list, the Office app was launched directly rather than through its wrapper, which does not enable the debug port; use the matching Connect item from the tray instead.</td>
     </tr>
   </tbody>
 </table>
@@ -918,10 +929,10 @@ errors. 90% of issues are obvious from there.
 <h2>Known limitations</h2>
 
 <ul>
-  <li>The <code>localhost:9222</code> debug port is unauthenticated. See Security note.</li>
+  <li>The WebView2 debug port (a dynamic localhost port per Office WebView2 host) is unauthenticated. See Security note.</li>
   <li>Corporate M365 with EDR/DLP may block the WebView2 flag. Not intended for sealed corporate laptops.</li>
   <li>A Claude add-in update that changes the panel DOM can break injection until a patch is released.</li>
-  <li><strong>Mac (macOS) is not supported and will not be supported.</strong> Word for Mac uses WKWebView instead of WebView2, and the entire launcher stack (bat, vbs, ps1) is Windows-only. Word Online is also not supported.</li>
+  <li><strong>Mac (macOS) is not supported and will not be supported.</strong> Office for Mac uses WKWebView instead of WebView2, and the entire launcher stack (bat, vbs, ps1) is Windows-only. Office Online (Word/Excel/PowerPoint Online) is also not supported.</li>
   <li>Custom builds of the Claude add-in (standalone Electron, alternate WebView) aren't supported.</li>
 </ul>
 
@@ -943,7 +954,7 @@ the panel, and your <code>doctor.log</code>.
 <p>
 Independent open-source tool. Not affiliated with, endorsed by, or connected
 to Anthropic or Microsoft. "Claude" is a trademark of Anthropic, PBC.
-"Microsoft" and "Word" are trademarks of Microsoft Corporation. This project
+"Microsoft", "Word", "Excel", and "PowerPoint" are trademarks of Microsoft Corporation. This project
 does not redistribute, modify, or contain proprietary code from either company.
 </p>
 
