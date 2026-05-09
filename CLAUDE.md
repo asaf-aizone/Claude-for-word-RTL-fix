@@ -213,7 +213,7 @@ Note: the GitHub repository was renamed in v0.2.1 from `Claude-for-word-RTL-fix`
 If the user says the tray is **red and stays red even after clicking "Connect"** or "nothing happens when I open Word", check `scripts/package.json`:
 
 - If version is `0.1.0`: the user has a known bug. Auto-enable sets the WebView2 debug flag on Word but does NOT start the Node injector, so the tray has nothing to attach to. Tell the user to upgrade to v0.1.1 or newer - the fix is that the tray now auto-launches the injector whenever Word is running without one. The v0.1.0 "Check for updates" dialog does not show the install folder; users have to find it manually via **Windows Settings > Apps > Installed apps > Claude for Word RTL Fix**. Full upgrade steps in the v0.1.1 release notes.
-- If version is `0.1.1` or later (current is `0.2.1`): the auto-launch mechanism is in place. Walk through tray log diagnostics: `%TEMP%\claude-word-rtl.log`, `%TEMP%\claude-word-rtl.status`, `%TEMP%\claude-office-rtl.apps.json`, `%TEMP%\claude-word-rtl.pid`.
+- If version is `0.1.1` or later (current is `0.2.2`): the auto-launch mechanism is in place. Walk through tray log diagnostics: `%TEMP%\claude-word-rtl.log`, `%TEMP%\claude-word-rtl.status`, `%TEMP%\claude-office-rtl.apps.json`, `%TEMP%\claude-word-rtl.pid`.
 
 ## What NOT to do
 

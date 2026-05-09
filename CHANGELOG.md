@@ -5,6 +5,43 @@ All notable changes to this project will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.2.2] - 2026-05-09
+
+### Fixed
+
+- The tray icon stayed red on v0.2.0 and v0.2.1 even when
+  the injector had successfully attached to Word, Excel, or
+  PowerPoint and was actively applying RTL to Claude's panel.
+  The icon color is driven by the per-app status file
+  (`%TEMP%\claude-office-rtl.apps.json`), which the tray
+  polls every 2 seconds and counts how many apps are
+  CONNECTED. The injector's `attach()` function called
+  `refreshAppsStatus()` BEFORE the just-attached client was
+  added to its in-memory `attached` map, so every refresh
+  rebuilt the per-app file as all-DISCONNECTED. The aggregate
+  one-line status file (`claude-word-rtl.status`) was written
+  correctly as CONNECTED, so under the hood RTL injection
+  worked, only the icon and the tray menu lied. Fix: the
+  client is now registered in the attach map BEFORE the
+  per-app refresh, so apps.json reflects reality.
+- Multiple `node inject.js` processes could end up running
+  concurrently when more than one launch path fired in
+  quick succession (a wrapper invocation racing with the
+  tray's auto-launch, or two wrappers in parallel for two
+  Office apps). The wrappers share a lock file, but the
+  tray's auto-launch path did not consult it, and `inject.js`
+  itself overwrote the PID file unconditionally on startup,
+  so the second injector would orphan the first by clobbering
+  its PID record. Multiple injectors then raced to evaluate
+  the same injector script in the same CDP target and
+  competed on the status files, which manifested as the tray
+  icon flapping and per-app status flipping. The injector
+  now acquires the PID file as a real mutex via O_EXCL
+  exclusive create at startup; duplicates exit silently and
+  let the running instance handle injection. Stale PID files
+  from a prior crash are detected (recorded PID is dead) and
+  reclaimed automatically.
+
 ## [0.2.1] - 2026-05-03
 
 ### Fixed

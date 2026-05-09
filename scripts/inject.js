@@ -36,8 +36,9 @@ const APPS_STATUS_FILE = path.join(TEMP_DIR, 'claude-office-rtl.apps.json');
 const PID_FILE = path.join(TEMP_DIR, 'claude-word-rtl.pid');
 // Rolling diagnostic log, truncated on each injector start so we only
 // keep the current session's activity. Used to diagnose Connect failures.
+// NOTE: truncate happens AFTER acquireSingletonLock() below, so duplicate
+// launches that exit silently do not clobber the running injector's log.
 const LOG_FILE = path.join(TEMP_DIR, 'claude-word-rtl.log');
-try { fs.writeFileSync(LOG_FILE, ''); } catch (e) { /* best-effort */ }
 function fileLog(msg) {
   try {
     fs.appendFileSync(LOG_FILE, new Date().toISOString() + ' ' + msg + '\n');
@@ -53,11 +54,61 @@ function writeStatus(s) {
   if (s === 'DISCONNECTED') inErrorState = false;
   try { fs.writeFileSync(STATUS_FILE, s + '\n'); } catch (e) { /* best-effort */ }
 }
-function writePidFile() {
-  try { fs.writeFileSync(PID_FILE, String(process.pid) + '\n'); } catch (e) { /* best-effort */ }
+function isPidAlive(pid) {
+  if (!pid || isNaN(pid)) return false;
+  try {
+    // Signal 0 is a no-op probe: throws if the process is gone, returns
+    // silently if it exists. EPERM means it exists but we cannot signal it
+    // (still proves existence).
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return e.code === 'EPERM';
+  }
+}
+// Singleton enforcement. Three independent paths can spawn this script
+// (the three Office wrappers, the tray auto-launch, and any manual
+// inject-hidden.vbs invocation), and they do NOT all coordinate on the
+// lock file. Race + non-coordinated paths historically left two or three
+// node processes running concurrently, each racing to inject the same
+// CSS into the same CDP target and clobbering each other's status writes.
+// Use the PID file itself as a real mutex via O_EXCL ('wx'): the first
+// caller to atomically create the file wins; duplicates exit silently.
+// Stale files (whose recorded PID is dead) are removed so a crash does
+// not lock out the next legitimate launch.
+function acquireSingletonLock() {
+  for (var attempt = 0; attempt < 2; attempt++) {
+    try {
+      var fd = fs.openSync(PID_FILE, 'wx');
+      fs.writeSync(fd, String(process.pid) + '\n');
+      fs.closeSync(fd);
+      return;
+    } catch (e) {
+      if (e.code !== 'EEXIST') throw e;
+      var owner = null;
+      try { owner = parseInt(fs.readFileSync(PID_FILE, 'utf8').trim(), 10); } catch (_) {}
+      if (owner && owner !== process.pid && isPidAlive(owner)) {
+        // Another live injector owns the lock. Exit silently and let it
+        // handle injection. Do not touch LOG_FILE - we haven't truncated
+        // yet, so the running instance's log is preserved.
+        process.exit(0);
+      }
+      // Stale lock from a dead PID. Remove and retry exactly once.
+      try { fs.unlinkSync(PID_FILE); } catch (_) {}
+    }
+  }
+  // Two attempts both lost the race to another concurrent starter.
+  // Defer to the winner.
+  process.exit(0);
 }
 function removePidFile() {
-  try { fs.unlinkSync(PID_FILE); } catch (e) { /* best-effort */ }
+  // Only remove if the PID file still records us as the owner. Guards
+  // against a SIGTERM-during-startup race where a newer injector has
+  // already acquired the lock and we would otherwise wipe its PID.
+  try {
+    var current = parseInt(fs.readFileSync(PID_FILE, 'utf8').trim(), 10);
+    if (current === process.pid) fs.unlinkSync(PID_FILE);
+  } catch (e) { /* best-effort */ }
 }
 // Per-app status writer. Builds {Word: ..., Excel: ..., PowerPoint: ...}
 // from the current attach map. Called from tick() after target reconcile,
@@ -79,7 +130,11 @@ function writeAppsStatus(connectedAppNames) {
 function writeAppsAllDisconnected() {
   writeAppsStatus(new Set());
 }
-writePidFile();
+acquireSingletonLock();
+// Truncate the rolling log only AFTER we won the singleton lock. A
+// duplicate launch that exits via acquireSingletonLock() must not clobber
+// the running injector's log file.
+try { fs.writeFileSync(LOG_FILE, ''); } catch (e) { /* best-effort */ }
 writeStatus('DISCONNECTED');
 writeAppsAllDisconnected();
 process.on('exit', function () {
@@ -294,6 +349,14 @@ async function attach(target, app, port) {
     await Page.addScriptToEvaluateOnNewDocument({ source: INJECTOR_SCRIPT });
     var result = await Runtime.evaluate({ expression: INJECTOR_SCRIPT, returnByValue: true });
     log('Attached & injected: [' + appName + '] port=' + port + ' url=' + target.url + ' -> ' + (result.result && result.result.value));
+    // Track the app name and register the client in the attach map BEFORE
+    // refreshing per-app status. refreshAppsStatus() iterates attached.values()
+    // to derive the {Word/Excel/PowerPoint -> CONNECTED} map; if the client
+    // is not yet in the map at that moment, the just-attached app is missed
+    // and apps.json keeps reporting it as DISCONNECTED until the next
+    // attach/disconnect event - which never comes for a stable session.
+    client.__appName = appName;
+    attached.set(target.id, client);
     writeStatus('CONNECTED');
     refreshAppsStatus();
 
@@ -316,11 +379,6 @@ async function attach(target, app, port) {
       if (attached.size === 0) writeStatus('DISCONNECTED');
       refreshAppsStatus();
     });
-
-    // Track the app name on the client so refreshAppsStatus can derive
-    // per-app state from the attach map without re-running discovery.
-    client.__appName = appName;
-    attached.set(target.id, client);
   } catch (err) {
     log('Attach failed for [' + appName + '] port=' + port + ' url=' + target.url + ': ' + err.message);
     fileLog('attach error stack: ' + (err && err.stack ? err.stack : '(no stack)'));
