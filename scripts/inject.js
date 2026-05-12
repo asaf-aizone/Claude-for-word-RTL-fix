@@ -39,6 +39,14 @@ const PID_FILE = path.join(TEMP_DIR, 'claude-word-rtl.pid');
 // NOTE: truncate happens AFTER acquireSingletonLock() below, so duplicate
 // launches that exit silently do not clobber the running injector's log.
 const LOG_FILE = path.join(TEMP_DIR, 'claude-word-rtl.log');
+// Per-app opt-in flag files for apps in officeApps.BLOCKED_HOST_INFO_KEYS.
+// Existence of the file = user has explicitly opted this app in for the
+// current injector session. Written by the matching wrapper (e.g. the future
+// outlook-wrapper.bat). Stale-cleared at injector startup so a previous
+// session's consent never carries silently into a new session.
+const OPTIN_FLAGS = {
+  outlook: path.join(TEMP_DIR, 'claude-office-rtl.outlook-optin'),
+};
 function fileLog(msg) {
   try {
     fs.appendFileSync(LOG_FILE, new Date().toISOString() + ' ' + msg + '\n');
@@ -135,6 +143,12 @@ acquireSingletonLock();
 // duplicate launch that exits via acquireSingletonLock() must not clobber
 // the running injector's log file.
 try { fs.writeFileSync(LOG_FILE, ''); } catch (e) { /* best-effort */ }
+// Clear any leftover opt-in flags. A new injector session always starts
+// with all blocked apps blocked; the matching wrapper must re-create the
+// flag on each launch.
+Object.keys(OPTIN_FLAGS).forEach(function (k) {
+  try { fs.unlinkSync(OPTIN_FLAGS[k]); } catch (e) { /* missing is fine */ }
+});
 writeStatus('DISCONNECTED');
 writeAppsAllDisconnected();
 process.on('exit', function () {
@@ -405,6 +419,18 @@ function refreshAppsStatus() {
 var tickCount = 0;
 var lastTargetsSig = null;
 var lastListErrorMsg = null;
+// target.id of blocked targets we have already logged a skip-line for, so
+// the log gets one line per appearance of a blocked target, not one per
+// 2s tick while it stays around. Pruned when the target goes away.
+var loggedBlockedIds = new Set();
+
+function readOptInKeys() {
+  var keys = new Set();
+  Object.keys(OPTIN_FLAGS).forEach(function (k) {
+    try { if (fs.existsSync(OPTIN_FLAGS[k])) keys.add(k); } catch (e) {}
+  });
+  return keys;
+}
 // v0.2.0: removed port-9222-squat detection - dynamic ports avoid the squat
 // pathology entirely. Each Office app gets its own ephemeral port via
 // --remote-debugging-port=0, so a non-Office CDP app on a fixed port no
@@ -436,6 +462,11 @@ async function tick() {
       droppedAny = true;
     }
   }
+  // Prune the blocked-log set the same way - if a blocked target closed,
+  // a future re-appearance should re-log.
+  for (var bid of Array.from(loggedBlockedIds)) {
+    if (!aliveIds.has(bid)) loggedBlockedIds.delete(bid);
+  }
   // If any target was reaped here (disconnect handler may not have fired
   // for app-exit cases where CDP closes abruptly), refresh the per-app
   // status so the tray sees the change within one tick.
@@ -449,9 +480,18 @@ async function tick() {
     lastTargetsSig = sig;
   }
 
+  var optInKeys = readOptInKeys();
   for (var i = 0; i < results.length; i++) {
     var r = results[i];
     if (attached.has(r.target.id)) continue;
+    if (officeApps.isHostInfoBlocked(r.target.url, optInKeys)) {
+      if (!loggedBlockedIds.has(r.target.id)) {
+        loggedBlockedIds.add(r.target.id);
+        fileLog('Blocked target (no opt-in): ' + officeApps.getHostInfoKey(r.target.url) +
+                '@' + r.port + ' url=' + r.target.url);
+      }
+      continue;
+    }
     await attach(r.target, r.app, r.port);
   }
 }
