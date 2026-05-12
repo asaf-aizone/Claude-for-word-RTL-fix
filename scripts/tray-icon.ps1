@@ -372,6 +372,167 @@ function Start-ConnectFor($app) {
     Start-Launch-Phase
 }
 
+function Start-ConnectOutlook {
+    # Dedicated Connect handler for Outlook. Differs from Start-ConnectFor:
+    #   - Shows an explicit content-exposure warning dialog (plan 4.2) with
+    #     Cancel as the default-focused button so the active confirmation is
+    #     OK, not "press enter at the wrong moment".
+    #   - Refuses if New Outlook (olk.exe) is up - the wrapper would refuse
+    #     too, but failing here gives a clearer message before any state
+    #     change.
+    #   - Closes classic Outlook if running but does NOT enumerate items to
+    #     reopen: mail and calendar are server-side, no local doc list to
+    #     persist across the close-and-relaunch cycle.
+    #   - Calls outlook-wrapper.bat with no document argument. The wrapper
+    #     writes the per-launch opt-in flag itself; we must not pre-write
+    #     it, because a freshly-spawned injector would clear it before
+    #     hitting the first tick.
+    if ($script:ConnectState.Phase -ne 'Idle') { return }
+
+    $outlookApp = $Apps | Where-Object { $_.Name -eq 'Outlook' } | Select-Object -First 1
+    if (-not $outlookApp) { return }
+    $wrapper = Join-Path $InstallDir $outlookApp.Wrapper
+    if (-not (Test-Path $wrapper)) { return }
+
+    if (Get-Process -Name 'olk' -ErrorAction SilentlyContinue) {
+        [System.Windows.Forms.MessageBox]::Show(
+            "New Outlook (olk.exe) is currently running.`n`n" +
+            "Close New Outlook first, then try Connect Outlook again. Even " +
+            "if you do not intend to use New Outlook, its presence collides " +
+            "with the classic-Outlook launch on shared state.",
+            'Claude for Office RTL - Connect Outlook',
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Warning
+        ) | Out-Null
+        return
+    }
+
+    # Primary warning dialog. Default button is Cancel (Button2) so a stray
+    # Enter press does not silently expose email content. The phrasing names
+    # the exact exposure rather than hand-waving about "security", because
+    # the user is consenting to something specific (DOM read while a panel
+    # is alive) and needs the specifics to weigh it.
+    $warnText = "Connect Outlook enables RTL on the Claude add-in panel inside Outlook. " +
+        "To do that, the local injector attaches to Outlook via CDP and can read " +
+        "the panel DOM while the connection is open.`n`n" +
+        "When you ask Claude to summarize or draft from an email, the email content " +
+        "briefly becomes part of the panel DOM. While it is there, any local process " +
+        "that can reach the injector's port - including the injector itself - can " +
+        "observe it.`n`n" +
+        "This exposure is higher-grade than for Word, Excel or PowerPoint document " +
+        "panels, because mail content is more sensitive and the panel sees it as " +
+        "part of normal use.`n`n" +
+        "Press OK to launch Outlook with RTL enabled. Press Cancel to abort - " +
+        "nothing will change."
+    $warn = [System.Windows.Forms.MessageBox]::Show(
+        $warnText,
+        'Claude for Office RTL - Connect Outlook',
+        [System.Windows.Forms.MessageBoxButtons]::OKCancel,
+        [System.Windows.Forms.MessageBoxIcon]::Warning,
+        [System.Windows.Forms.MessageBoxDefaultButton]::Button2
+    )
+    if ($warn -ne [System.Windows.Forms.DialogResult]::OK) { return }
+
+    $running = Get-Process -Name $outlookApp.ProcessName -ErrorAction SilentlyContinue
+    if ($running) {
+        # Second dialog: Outlook is alive without the debug env var, so it
+        # must be closed and re-launched via the wrapper. No doc enumeration
+        # because mail/calendar are server-side.
+        $ans2 = [System.Windows.Forms.MessageBox]::Show(
+            "Outlook is currently running without the RTL debug flag.`n`n" +
+            "To enable the RTL fix, Outlook must be closed and reopened. The " +
+            "WebView2 debug flag is inherited at process start time only, so " +
+            "a running Outlook cannot pick it up.`n`n" +
+            "Mail and calendar items are server-side and will reappear " +
+            "automatically when Outlook restarts. Save any in-progress drafts " +
+            "before continuing.`n`n" +
+            "Close Outlook now and relaunch with RTL?",
+            'Claude for Office RTL - Connect Outlook',
+            [System.Windows.Forms.MessageBoxButtons]::OKCancel,
+            [System.Windows.Forms.MessageBoxIcon]::Question,
+            [System.Windows.Forms.MessageBoxDefaultButton]::Button2
+        )
+        if ($ans2 -ne [System.Windows.Forms.DialogResult]::OK) { return }
+
+        $script:ConnectState.App = $outlookApp
+        $script:ConnectState.DocsToReopen = @()
+        $script:ConnectState.WaitedMs = 0
+        $script:ConnectState.Phase = 'WaitingForClose'
+        $running | ForEach-Object { $_.CloseMainWindow() | Out-Null }
+
+        $closeTimer = New-Object System.Windows.Forms.Timer
+        $closeTimer.Interval = 250
+        $closeTimer.add_Tick({
+            $a = $script:ConnectState.App
+            if (-not $a) { Stop-ConnectTimers; return }
+            $stillRunning = [bool](Get-Process -Name $a.ProcessName -ErrorAction SilentlyContinue)
+            if (-not $stillRunning) {
+                $script:ConnectState.CloseTimer.Stop()
+                $script:ConnectState.CloseTimer.Dispose()
+                $script:ConnectState.CloseTimer = $null
+                $delay = New-Object System.Windows.Forms.Timer
+                $delay.Interval = 500
+                $delay.add_Tick({
+                    $script:ConnectState.LaunchTimer.Stop()
+                    $script:ConnectState.LaunchTimer.Dispose()
+                    $script:ConnectState.LaunchTimer = $null
+                    $a2 = $script:ConnectState.App
+                    if ($a2) {
+                        $w = Join-Path $InstallDir $a2.Wrapper
+                        Start-Process -WindowStyle Hidden -FilePath 'cmd.exe' -ArgumentList '/c', "`"$w`""
+                    }
+                    Stop-ConnectTimers
+                })
+                $script:ConnectState.LaunchTimer = $delay
+                $delay.Start()
+                return
+            }
+            $script:ConnectState.WaitedMs += 250
+            if ($script:ConnectState.WaitedMs -ge 10000) {
+                $script:ConnectState.CloseTimer.Stop()
+                $script:ConnectState.CloseTimer.Dispose()
+                $script:ConnectState.CloseTimer = $null
+                $force = [System.Windows.Forms.MessageBox]::Show(
+                    "Outlook did not close within 10 seconds.`n`n" +
+                    "This usually means Outlook is showing a dialog (unsent-mail " +
+                    "prompt, add-in message) that is blocking shutdown.`n`n" +
+                    "Press OK to force-close Outlook and relaunch with RTL. " +
+                    "WARNING: any unsent drafts not yet saved will be LOST.`n`n" +
+                    "Press Cancel to leave Outlook as-is. You can respond to " +
+                    "the dialog and try Connect Outlook again.",
+                    'Claude for Office RTL - Connect Outlook',
+                    [System.Windows.Forms.MessageBoxButtons]::OKCancel,
+                    [System.Windows.Forms.MessageBoxIcon]::Warning,
+                    [System.Windows.Forms.MessageBoxDefaultButton]::Button2
+                )
+                if ($force -eq [System.Windows.Forms.DialogResult]::OK) {
+                    Get-Process -Name $script:ConnectState.App.ProcessName -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+                    Start-Sleep -Milliseconds 400
+                    $a3 = $script:ConnectState.App
+                    if ($a3) {
+                        $w = Join-Path $InstallDir $a3.Wrapper
+                        Start-Process -WindowStyle Hidden -FilePath 'cmd.exe' -ArgumentList '/c', "`"$w`""
+                    }
+                    Stop-ConnectTimers
+                } else {
+                    Stop-ConnectTimers
+                }
+            }
+        })
+        $script:ConnectState.CloseTimer = $closeTimer
+        $closeTimer.Start()
+        return
+    }
+
+    # Outlook not running - call wrapper directly. Wrapper sets the env var,
+    # writes the opt-in flag, ensures the injector is up, then starts Outlook.
+    $script:ConnectState.App = $outlookApp
+    $script:ConnectState.DocsToReopen = @()
+    $script:ConnectState.Phase = 'Launching'
+    Start-Process -WindowStyle Hidden -FilePath 'cmd.exe' -ArgumentList '/c', "`"$wrapper`""
+    Stop-ConnectTimers
+}
+
 # --- Status labels (top of menu, refreshed each tick) ---
 # 3 disabled menu items showing per-app state: "Word: connected", etc.
 # Stored in a parallel array so the tick handler can update Text in place.
@@ -407,6 +568,18 @@ foreach ($a in $Apps) {
     }.GetNewClosure()) | Out-Null
     $script:ConnectItems[$a.Name] = $mi
 }
+
+# --- Connect Outlook (opt-in, dedicated handler) ---
+# Outlook is OptIn so the generic loop above skipped it. The dedicated item
+# below routes through Start-ConnectOutlook, which shows the per-launch
+# warning dialog (plan section 4.2) before doing anything else. Registering
+# the item in $script:ConnectItems wires it into the per-tick "disable
+# Connect while a Connect flow is in progress" invariant.
+$miConnectOutlook = $menu.Items.Add('Connect Outlook')
+$miConnectOutlook.add_Click({
+    Start-ConnectOutlook
+}) | Out-Null
+$script:ConnectItems['Outlook'] = $miConnectOutlook
 
 $menu.Items.Add('-') | Out-Null  # separator
 
@@ -465,6 +638,12 @@ $miDisconnectAll.add_Click({
         Remove-Item $PidFile -Force -ErrorAction SilentlyContinue
     }
     if (Test-Path $LockFile) { Remove-Item $LockFile -Force -ErrorAction SilentlyContinue }
+    # Revoke any per-launch opt-in flag for OptIn apps so a stray surviving
+    # injector cannot re-attach on its next tick. The wrapper writes the flag
+    # for each new Connect Outlook; Disconnect-all should not leave consent
+    # lying around for the next injector session to pick up silently.
+    $outlookOptIn = Join-Path $env:TEMP 'claude-office-rtl.outlook-optin'
+    if (Test-Path $outlookOptIn) { Remove-Item $outlookOptIn -Force -ErrorAction SilentlyContinue }
     Set-Content -Path $StatusFile -Value 'DISCONNECTED' -Encoding ASCII -ErrorAction SilentlyContinue
     # Best-effort clear of the per-app status file too. The injector
     # would normally rewrite this on its next tick, but since we just
@@ -607,8 +786,8 @@ $miUninstall.add_Click({
         "  - Stop the tray and the injector`n" +
         "  - Clean node_modules and temp status files`n" +
         "  - Remove any legacy WebView2 env var written by older installs`n`n" +
-        "Word, Excel and PowerPoint themselves are not modified. The install" +
-        " folder stays in place - you can delete it manually afterward.",
+        "Word, Excel, PowerPoint and Outlook themselves are not modified. The" +
+        " install folder stays in place - you can delete it manually afterward.",
         'Claude for Office RTL - Uninstall',
         [System.Windows.Forms.MessageBoxButtons]::OKCancel,
         [System.Windows.Forms.MessageBoxIcon]::Warning
