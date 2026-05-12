@@ -59,10 +59,21 @@ $StaleSeconds = 15
 # on each app, used by the Connect flow to remember which docs to reopen
 # after relaunch via the wrapper. ProcessName is the executable basename
 # without .EXE (matches Get-Process -Name semantics).
+#
+# OptIn = $true marks an app that requires explicit per-launch consent and
+# is NOT wired into the generic auto-launch / generic Connect-item loops.
+# Outlook is opt-in because silent CDP attach to mail content is a higher-
+# grade exposure than to Word/Excel/PowerPoint document panels (see
+# docs/OUTLOOK-EXPANSION-PLAN.md section 3, and probe/README.md "silent
+# CDP attach" for the M0 evidence). The dedicated Outlook Connect item
+# with its warning dialog (section 4.2 of the plan) is added in M1d.
+# Until then the Outlook entry exists only so the tray's status label and
+# apps.json reader recognise the app and surface its state.
 $Apps = @(
     @{ Name = 'Word';       ProcessName = 'WINWORD';  ProgId = 'Word.Application';       Wrapper = 'word-wrapper.bat';       DocCollection = 'Documents'    }
     @{ Name = 'Excel';      ProcessName = 'EXCEL';    ProgId = 'Excel.Application';      Wrapper = 'excel-wrapper.bat';      DocCollection = 'Workbooks'    }
     @{ Name = 'PowerPoint'; ProcessName = 'POWERPNT'; ProgId = 'PowerPoint.Application'; Wrapper = 'powerpoint-wrapper.bat'; DocCollection = 'Presentations' }
+    @{ Name = 'Outlook';    ProcessName = 'OUTLOOK';  ProgId = 'Outlook.Application';    Wrapper = 'outlook-wrapper.bat';    DocCollection = $null;            OptIn = $true }
 )
 
 # Win32 DestroyIcon P/Invoke so we can release GDI handles produced by
@@ -376,6 +387,11 @@ $menu.Items.Add('-') | Out-Null  # separator
 # --- Connect items, one per app ---
 $script:ConnectItems = @{}
 foreach ($a in $Apps) {
+    # OptIn apps (Outlook) get a dedicated Connect item with a warning
+    # dialog and an opt-in flag write, added in M1d. The generic Connect
+    # flow (close-then-relaunch with no consent UX) is unsafe for them
+    # because of the mail-content exposure model.
+    if ($a.OptIn) { continue }
     $captured = $a   # capture for closure (PowerShell foreach var is shared)
     $mi = $menu.Items.Add("Connect $($captured.Name)")
     # ScriptBlock::Create + GetNewClosure avoids the classic PowerShell
@@ -413,8 +429,13 @@ $miDisconnectAll.add_Click({
     # 2. Close every Office app we know about. WebView2 shuts down with
     #    the host app, which closes the debug port; inject.js keeps
     #    polling and flips DISCONNECTED within ~2 seconds.
+    #    OptIn apps (Outlook) are skipped here: the user did not launch
+    #    them through our Connect flow (Connect Outlook is M1d), so we
+    #    must not close mail or calendar windows under their feet. The
+    #    injector-side detach below is enough to drop the CDP attachment.
     $anyClosed = $false
     foreach ($a in $Apps) {
+        if ($a.OptIn) { continue }
         $running = Get-Process -Name $a.ProcessName -ErrorAction SilentlyContinue
         if ($running) {
             $running | ForEach-Object { $_.CloseMainWindow() | Out-Null }
@@ -425,6 +446,7 @@ $miDisconnectAll.add_Click({
         Start-Sleep -Milliseconds 800
         # Force-kill anything that refused to close gracefully.
         foreach ($a in $Apps) {
+            if ($a.OptIn) { continue }
             Get-Process -Name $a.ProcessName -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
         }
     }
@@ -726,7 +748,13 @@ $tickAction = {
     foreach ($a in $Apps) {
         $state = Get-EffectiveAppState $a $appsStatus
         $perApp[$a.Name] = $state
-        if ($state -ne 'not running') { $anyAppRunning = $true }
+        # An OptIn app being up does NOT justify auto-launching the injector.
+        # The user might have started Outlook normally with no intent to use
+        # the RTL fix this session, and the injector's blocklist would just
+        # idle on the target anyway (wasting a node process). Only the
+        # dedicated Connect Outlook flow (M1d) should bring the injector up
+        # for an OptIn app.
+        if ($state -ne 'not running' -and -not $a.OptIn) { $anyAppRunning = $true }
         # Refresh the disabled status label in place.
         $mi = $script:StatusItems[$a.Name]
         if ($mi) { $mi.Text = "$($a.Name): $state" }
