@@ -620,6 +620,46 @@ $script:ConnectItems['Outlook'] = $miConnectOutlook
 
 $menu.Items.Add('-') | Out-Null  # separator
 
+# --- Disconnect Outlook only ---
+# Targeted teardown for Outlook that leaves Word/Excel/PowerPoint connected.
+# The user's mental model: "I am done with mail for now, but I am still
+# editing a Word doc with the panel open." Without this item the only
+# alternative is Disconnect all, which would close every Office app the
+# user is in the middle of using - the friction is high enough that the
+# user would never actually disconnect Outlook between mail sessions and
+# the 15-minute auto-disconnect (plan 4.4) would be the only meaningful
+# end-of-session for the CDP attach.
+#
+# IPC: writes the per-app request file polled by the injector at the top
+# of each tick (inject.js processDisconnectRequests). The injector then
+# closes the Outlook CDP clients, clears their auto-disconnect timers,
+# and revokes the opt-in flag. We also revoke the opt-in flag here as a
+# best-effort defence against a wedged injector that never picks the
+# request up.
+#
+# Outlook itself is NOT closed. Mail can still be read normally; the only
+# loss is the RTL panel inside Outlook, which the user can re-enable with
+# Connect Outlook later.
+$miDisconnectOutlookOnly = $menu.Items.Add('Disconnect Outlook only')
+$miDisconnectOutlookOnly.add_Click({
+    $reqFile = Join-Path $env:TEMP 'claude-office-rtl.disconnect-outlook.request'
+    $optInFile = Join-Path $env:TEMP 'claude-office-rtl.outlook-optin'
+    try {
+        Set-Content -Path $reqFile -Value '' -Encoding ASCII -ErrorAction Stop
+    } catch {
+        [System.Windows.Forms.MessageBox]::Show(
+            "Could not write the disconnect request file:`n$reqFile`n`n" +
+            "Error: $($_.Exception.Message)`n`n" +
+            "You can use Disconnect all as a fallback, which closes every Office app instead.",
+            'Claude for Office RTL - Disconnect Outlook only',
+            [System.Windows.Forms.MessageBoxButtons]::OK,
+            [System.Windows.Forms.MessageBoxIcon]::Warning
+        ) | Out-Null
+        return
+    }
+    if (Test-Path $optInFile) { Remove-Item $optInFile -Force -ErrorAction SilentlyContinue }
+}) | Out-Null
+
 # --- Disconnect all ---
 $miDisconnectAll = $menu.Items.Add('Disconnect all')
 $miDisconnectAll.add_Click({
@@ -1008,6 +1048,12 @@ $tickAction = {
     }
     # Disconnect-all: enabled when there is ANY state to tear down.
     $miDisconnectAll.Enabled = ($anyAppRunning -or $injectorAlive -or $connectInProgress)
+    # Disconnect Outlook only: enabled iff Outlook is currently connected.
+    # If Outlook is "running without RTL" or "not running" there is no CDP
+    # attachment to drop, so the menu item is dimmed - clicking it would
+    # write a request file that the injector would consume to no effect,
+    # and the user would (correctly) wonder why nothing happened.
+    $miDisconnectOutlookOnly.Enabled = ($perApp['Outlook'] -eq 'connected')
 
     # Aggregate icon + tooltip. We compute a signature so we only repaint
     # when something actually changed, since GDI handle churn is the
