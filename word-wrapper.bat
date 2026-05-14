@@ -79,6 +79,29 @@ if not defined SKIP_INJECTOR (
     wscript "%~dp0inject-hidden.vbs"
 )
 
+REM Mutex-settle wait. Word uses a per-user named mutex for single-instance
+REM coordination. The mutex can outlive the visible WINWORD.EXE process by
+REM 1-3 seconds while WebView2 and COM unwind. If the tray's "Connect Word"
+REM flow relaunches Word before the mutex is released, the new WINWORD sees
+REM an existing instance, hands off to the dying one, and silently exits -
+REM looking like "Word never came back" to the user. Poll tasklist up to ~5s
+REM (5 x 1s) for WINWORD.EXE to disappear, then proceed. Fail-open: if
+REM still present after 5s, launch anyway - no worse than before.
+REM
+REM We use `timeout` not `ping -w 250` for the sleep. Loopback replies in
+REM ~0ms and `-w` only controls the reply-timeout, so `ping -n 1 -w 250`
+REM returns instantly and a 20-iteration loop would complete in <50ms -
+REM effectively no wait at all.
+set /a _WAIT_ITER=0
+:wait_winword_gone
+tasklist /FI "IMAGENAME eq WINWORD.EXE" 2>nul | find /I "WINWORD.EXE" >nul
+if errorlevel 1 goto :proceed_launch
+set /a _WAIT_ITER+=1
+if %_WAIT_ITER% GEQ 5 goto :proceed_launch
+timeout /t 1 /nobreak >nul 2>&1
+goto :wait_winword_gone
+
+:proceed_launch
 REM Launch Word (pass through any file argument)
 if "%~1"=="" (
     start "" "%WINWORD%"

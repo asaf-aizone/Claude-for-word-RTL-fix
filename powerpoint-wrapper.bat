@@ -64,6 +64,29 @@ if not defined SKIP_INJECTOR (
     wscript "%~dp0inject-hidden.vbs"
 )
 
+REM Mutex-settle wait. PowerPoint uses a per-user named mutex for single-
+REM instance coordination. The mutex can outlive the visible POWERPNT.EXE
+REM process by 1-3 seconds while WebView2 and COM unwind. If the tray's
+REM "Connect PowerPoint" flow relaunches before the mutex is released, the
+REM new POWERPNT sees an existing instance, hands off to the dying one, and
+REM silently exits - looking like "PowerPoint never came back" to the user.
+REM Poll tasklist up to ~5s (5 x 1s) for POWERPNT.EXE to disappear,
+REM then proceed. Fail-open: if still present after 5s, launch anyway.
+REM
+REM We use `timeout` not `ping -w 250` for the sleep. Loopback replies in
+REM ~0ms and `-w` only controls the reply-timeout, so `ping -n 1 -w 250`
+REM returns instantly and a 20-iteration loop would complete in <50ms -
+REM effectively no wait at all.
+set /a _WAIT_ITER=0
+:wait_powerpnt_gone
+tasklist /FI "IMAGENAME eq POWERPNT.EXE" 2>nul | find /I "POWERPNT.EXE" >nul
+if errorlevel 1 goto :proceed_launch
+set /a _WAIT_ITER+=1
+if %_WAIT_ITER% GEQ 5 goto :proceed_launch
+timeout /t 1 /nobreak >nul 2>&1
+goto :wait_powerpnt_gone
+
+:proceed_launch
 REM Launch PowerPoint (pass through any presentation argument)
 if "%~1"=="" (
     start "" "%POWERPNT%"

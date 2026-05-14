@@ -207,6 +207,13 @@ function Start-Launch-Phase {
     # come up before each.
     $app = $script:ConnectState.App
     if (-not $app) { Stop-ConnectTimers; return }
+    if (Get-Process -Name $app.ProcessName -ErrorAction SilentlyContinue) {
+        # closeTimer observed the app gone but it re-appeared (rare:
+        # background COM auto-relaunch, or user opened a fresh instance
+        # in the gap). Bail; the user can click Connect again.
+        Stop-ConnectTimers
+        return
+    }
     $wrapper = Join-Path $InstallDir $app.Wrapper
     $docs = $script:ConnectState.DocsToReopen
     $script:ConnectState.Phase = 'Launching'
@@ -326,7 +333,16 @@ function Start-ConnectFor($app) {
                 # delay because the Office process itself needs a moment
                 # to fully unwind before we spawn a new one.
                 $delay = New-Object System.Windows.Forms.Timer
-                $delay.Interval = 500
+                # Office's per-user single-instance mutex can outlive
+                # Get-Process going empty by ~1-3 seconds during the
+                # WebView2/COM unwind. Launching too early hits the
+                # dying instance and silently no-ops (500ms was
+                # insufficient in practice). The wrappers also have a
+                # defensive tasklist poll, but this longer delay
+                # reduces the chance the wrapper has to wait. See
+                # word-wrapper.bat / excel-wrapper.bat /
+                # powerpoint-wrapper.bat for the wrapper-side guard.
+                $delay.Interval = 1500
                 $delay.add_Tick({
                     $script:ConnectState.LaunchTimer.Stop()
                     $script:ConnectState.LaunchTimer.Dispose()
@@ -354,7 +370,15 @@ function Start-ConnectFor($app) {
                 )
                 if ($force -eq [System.Windows.Forms.DialogResult]::OK) {
                     Get-Process -Name $script:ConnectState.App.ProcessName -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-                    Start-Sleep -Milliseconds 400  # short, after force kill
+                    # 1500ms (was 400ms) so the per-user single-instance
+                    # mutex and WebView2/COM children finish unwinding before
+                    # we relaunch. Stop-Process returns synchronously but
+                    # kernel teardown lingers; Start-Launch-Phase has a
+                    # Get-Process guard that would otherwise bail silently
+                    # and leave the user with no Word, no error, AND lost
+                    # unsaved work (since we just force-killed). Match the
+                    # 1500ms used after a graceful close above.
+                    Start-Sleep -Milliseconds 1500
                     Start-Launch-Phase
                 } else {
                     Stop-ConnectTimers
@@ -471,7 +495,15 @@ function Start-ConnectOutlook {
                 $script:ConnectState.CloseTimer.Dispose()
                 $script:ConnectState.CloseTimer = $null
                 $delay = New-Object System.Windows.Forms.Timer
-                $delay.Interval = 500
+                # Office's per-user single-instance mutex can outlive
+                # Get-Process going empty by ~1-3 seconds during the
+                # WebView2/COM unwind. Launching too early hits the
+                # dying instance and silently no-ops (500ms was
+                # insufficient in practice). Outlook's wrapper also
+                # has a strict "refuse if running" guard, so racing
+                # it produces a confusing "already running" error.
+                # See outlook-wrapper.bat for the wrapper-side guard.
+                $delay.Interval = 1500
                 $delay.add_Tick({
                     $script:ConnectState.LaunchTimer.Stop()
                     $script:ConnectState.LaunchTimer.Dispose()
@@ -507,7 +539,12 @@ function Start-ConnectOutlook {
                 )
                 if ($force -eq [System.Windows.Forms.DialogResult]::OK) {
                     Get-Process -Name $script:ConnectState.App.ProcessName -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-                    Start-Sleep -Milliseconds 400
+                    # 1500ms (was 400ms) so the per-user single-instance
+                    # mutex and WebView2/COM children finish unwinding before
+                    # the wrapper runs - the wrapper would otherwise refuse
+                    # to start (Outlook's pre-flight is strict) and the user
+                    # would have lost in-progress drafts AND get no Outlook.
+                    Start-Sleep -Milliseconds 1500
                     $a3 = $script:ConnectState.App
                     if ($a3) {
                         $w = Join-Path $InstallDir $a3.Wrapper
