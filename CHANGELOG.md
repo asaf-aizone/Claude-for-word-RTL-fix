@@ -5,6 +5,164 @@ All notable changes to this project will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-05-16
+
+### Added
+
+- **Outlook support, opt-in per launch, with a stricter security
+  model than Word/Excel/PowerPoint.** The Claude add-in panel inside
+  classic Outlook now renders RTL when the user explicitly clicks
+  **Connect Outlook** from the tray and accepts a warning dialog.
+  Mail content becomes part of the panel DOM when the user runs
+  "Summarize this email" or "Draft a reply", and CDP-attached
+  injection makes that DOM readable by any local process under the
+  same user. The exposure window is short (only while the operation
+  is in flight) but the content class is qualitatively more
+  sensitive than for Word/Excel/PowerPoint document panels. The
+  protections below are what the Outlook code path adds; they do
+  not change behaviour for the other three apps.
+- `outlook-wrapper.bat` parallel to the three existing wrappers.
+  Sets `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=0`
+  in its own process scope only, writes the per-launch opt-in flag
+  (`%TEMP%\claude-office-rtl.outlook-optin`) that gates the
+  injector, then launches classic Outlook. Refuses to run if New
+  Outlook (`olk.exe`) is detected, to avoid colliding with the
+  classic Outlook launch on shared per-user state.
+- **Connect Outlook** menu item in the tray. Shows an explicit
+  content-exposure warning dialog whose default-focused button is
+  Cancel, naming the exact exposure (local processes can read panel
+  DOM while attached) rather than hand-waving about "security". A
+  stray Enter does not silently opt the user in.
+- **Disconnect Outlook only** menu item in the tray. Drops the
+  Outlook CDP attachment without closing Outlook itself and
+  without affecting Word/Excel/PowerPoint sessions. Implementation:
+  the tray writes a request file (`claude-office-rtl.disconnect-
+  outlook.request`) the injector polls each tick; the injector
+  closes the Outlook CDP client(s), clears the per-Outlook
+  auto-disconnect timer, and revokes the opt-in flag. Enabled only
+  while Outlook is connected.
+- Per-app `BLOCKED_HOST_INFO_KEYS` set in `lib/office-apps.js`.
+  Outlook is permanently on the list: the injector still discovers
+  the Outlook target each tick and logs it as blocked, but does
+  not attach unless the opt-in flag exists. The flag is never
+  persisted across injector restarts; the injector clears it at
+  startup so a previous session's consent never carries silently
+  into a new session.
+- 15-minute auto-disconnect timer for Outlook CDP attachments
+  (`OUTLOOK_AUTO_DISCONNECT_MIN` in `scripts/inject.js`). After
+  the timeout the injector tears the Outlook CDP client down on
+  its own and revokes the opt-in flag. The user must click
+  Connect Outlook again to start a new session. Word/Excel/
+  PowerPoint are unaffected.
+- URL redaction for Outlook log entries. The Office add-in URL
+  contains an `et=` parameter holding base64-encoded tenant
+  metadata (account id, tenant id, expiry). For Outlook only, the
+  injector strips every query parameter from logged URLs except
+  `_host_Info=` and replaces the rest with `[redacted]`, so the
+  diagnostic log no longer leaks tenant identifiers to anyone with
+  read access to `%TEMP%`. Word/Excel/PowerPoint URLs are logged
+  verbatim, unchanged from v0.2.x.
+- Outlook row in the tray's per-app status labels (`Outlook:
+  connected / not running / running without RTL / error`), driven
+  by the same `apps.json` mechanism as the other three apps. The
+  injector's auto-launch (recovery path when an Office app is up
+  but the injector died) intentionally ignores Outlook so an
+  unrelated Outlook session does not trigger CDP attach.
+- Race guard in `attach()` that aborts an in-flight Outlook attach
+  if a Disconnect Outlook only click arrived during the CDP
+  handshake. Without it the disconnect request could fire against
+  an empty attach map and leave the about-to-be-registered client
+  orphaned with no opt-in flag and no way to be torn down again
+  until the 15-minute auto-disconnect.
+- `doctor.bat` extended from 15 to 19 checks. New: Outlook
+  installed (path detection via the shared `:find_office_app`
+  helper), Outlook process running, Outlook CDP target via dynamic
+  port discovery, Outlook entry in `apps.json`. All four are
+  `:info` because Outlook is opt-in - a user who never wants to
+  Connect Outlook can ignore the entire group.
+- `probe/outlook-host-discovery.bat` and
+  `probe/outlook-host-discovery.js`, the M0 host-discovery probe
+  used to confirm classic Outlook on Microsoft 365 is in scope
+  (and to defer New Outlook / `olk.exe`).
+- New "Outlook-specific risks and mitigations" section in
+  `docs/security.md` documenting the opt-in model, the warning
+  dialog, the target filter (lowercased equality on the first
+  `$`-delimited segment of `_host_Info=`, not defence against a
+  forged value from a local process - opt-in + auto-disconnect
+  carry that load), URL redaction, the auto-disconnect timer, and
+  the Disconnect Outlook only flow.
+
+### Security
+
+- The whole Outlook support track was driven by a security
+  finding, not a feature request. In the M0 probe the existing
+  v0.2.2 injector was observed to attach to the Outlook CDP
+  target automatically the moment the WebView2 debug flag was set
+  on Outlook, with no consent dialog and no opt-in step (because
+  the v0.2.x code only filtered on `pivot.claude.ai`, never on
+  the host Office app). Shipping a `Connect Outlook` item without
+  the per-app block list and per-launch opt-in would have meant
+  that v0.3.0 silently enabled CDP attach to Outlook for every
+  user who upgraded. The opt-in model and the per-app filter in
+  `lib/office-apps.js` close that exposure for the new
+  app while leaving Word/Excel/PowerPoint behaviour unchanged.
+- No new EDR triggers introduced. The per-process environment-
+  variable model from v0.2.0 is preserved unchanged for Outlook
+  (`outlook-wrapper.bat` is structurally identical to the three
+  existing wrappers; it only adds the opt-in flag write).
+- `doctor.bat` continues to fail loudly if the legacy
+  `HKCU\Environment\WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` env
+  var ever returns. Check still at step 14, now numbered 14/19.
+
+### Changed
+
+- `lib/office-apps.js` `APPS` now includes Outlook. The injector
+  log and the per-app status file recognise the app name and the
+  `_host_Info=` value `Outlook$Win32$...`. Registration in `APPS`
+  on its own does NOT grant attach; attach is governed separately
+  by `BLOCKED_HOST_INFO_KEYS` + the opt-in flag.
+- `scripts/tray-icon.ps1` `$Apps` has an Outlook entry tagged
+  `OptIn = $true`. The generic Connect-item loop skips OptIn
+  apps; a dedicated `Start-ConnectOutlook` handler with the
+  warning dialog handles them instead. The injector auto-launch
+  path's `anyAppRunning` check ignores OptIn apps so an unrelated
+  Outlook session does not bring the injector up on its own.
+- Disconnect all now revokes any per-launch Outlook opt-in flag in
+  addition to killing the injector, so a stray surviving injector
+  cannot re-attach on its next tick.
+
+### Compatibility
+
+- v0.2.x state files are forward-compatible. `apps.json` gets a
+  fourth key (`Outlook`); older tray builds that do not know
+  about it just ignore the key.
+- Users upgrading from v0.2.2 who never click Connect Outlook see
+  no behavioural change. Outlook is opt-in at the tray and at the
+  injector; the new wrapper is never invoked, the opt-in flag is
+  never written, and the injector logs the Outlook target as
+  blocked each tick (visible in the diagnostic log but otherwise
+  invisible).
+- New Outlook (`olk.exe`) is intentionally out of scope. M0
+  deferred it; `outlook-wrapper.bat` and the tray's Connect
+  Outlook both refuse if New Outlook is detected to avoid
+  colliding on shared state.
+
+### Known limitations
+
+- The Outlook target filter is a lowercased equality on the first
+  `$`-delimited segment of `_host_Info=`. A local process that
+  stands up its own WebView2 with a forged `_host_Info=Outlook$...`
+  would satisfy the filter; defence against that scenario relies
+  on the opt-in flag and the 15-minute auto-disconnect, not on
+  the filter alone. See `docs/security.md` "Outlook-specific
+  risks and mitigations" for the full rationale.
+- The DOM mutation from a successful `Runtime.evaluate`
+  (`<style id="__claude_rtl_fix__">`, `dir="rtl"`) is not torn
+  down when the CDP client is closed. This is consistent with
+  every other disconnect path (Disconnect all, app exit,
+  navigation, the 15-minute auto-disconnect timer) - none of
+  them remove the injected style; they only close CDP.
+
 ## [0.2.2] - 2026-05-09
 
 ### Fixed

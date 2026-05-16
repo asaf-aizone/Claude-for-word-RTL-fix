@@ -33,77 +33,77 @@ call :log "================================================================"
 call :log ""
 
 REM ---------------------------------------------------------------
-REM [1/15] Node.js
+REM [1/19] Node.js
 REM ---------------------------------------------------------------
 where node >nul 2>&1
 if errorlevel 1 goto :node_missing
 for /f "delims=" %%v in ('node --version 2^>^&1') do set "NODE_VER=%%v"
-call :ok "[1/15] Node.js: !NODE_VER!"
+call :ok "[1/19] Node.js: !NODE_VER!"
 goto :step_2
 :node_missing
-call :fail "[1/15] Node.js: not found in PATH"
+call :fail "[1/19] Node.js: not found in PATH"
 :step_2
 
 REM ---------------------------------------------------------------
-REM [2/15] npm
+REM [2/19] npm
 REM ---------------------------------------------------------------
 where npm >nul 2>&1
 if errorlevel 1 goto :npm_missing
 for /f "delims=" %%v in ('npm --version 2^>^&1') do set "NPM_VER=%%v"
-call :ok "[2/15] npm: !NPM_VER!"
+call :ok "[2/19] npm: !NPM_VER!"
 goto :step_3
 :npm_missing
-call :fail "[2/15] npm: not found in PATH"
+call :fail "[2/19] npm: not found in PATH"
 :step_3
 
 REM ---------------------------------------------------------------
-REM [3/15] chrome-remote-interface
+REM [3/19] chrome-remote-interface
 REM ---------------------------------------------------------------
 set "CRI_INSTALLED="
 if not exist "%HERE%\scripts\node_modules\chrome-remote-interface" goto :cri_missing
 set "CRI_INSTALLED=1"
-call :ok "[3/15] chrome-remote-interface: installed"
+call :ok "[3/19] chrome-remote-interface: installed"
 goto :step_4
 :cri_missing
-call :fail "[3/15] chrome-remote-interface: missing - run install.bat or 'npm install' in scripts\"
+call :fail "[3/19] chrome-remote-interface: missing - run install.bat or 'npm install' in scripts\"
 :step_4
 
 REM ---------------------------------------------------------------
-REM [4/15] Office apps installed (Word, Excel, PowerPoint)
+REM [4/19] Office apps installed (Word, Excel, PowerPoint)
 REM ---------------------------------------------------------------
 REM Click-to-Run paths first (modern installs), then MSI fallback (no 'root\').
 REM Word is the headline app: missing -> FAIL. Excel/PowerPoint optional -> INFO.
 call :find_office_app WINWORD.EXE
 if not defined OFFICE_FOUND goto :word_missing
-call :ok "[4/15] WINWORD.EXE: !OFFICE_FOUND!"
+call :ok "[4/19] WINWORD.EXE: !OFFICE_FOUND!"
 goto :step_4_excel
 :word_missing
-call :fail "[4/15] WINWORD.EXE: not found in default Office 16 locations"
+call :fail "[4/19] WINWORD.EXE: not found in default Office 16 locations"
 :step_4_excel
 call :find_office_app EXCEL.EXE
 if not defined OFFICE_FOUND goto :excel_missing
-call :ok "[4/15] EXCEL.EXE: !OFFICE_FOUND!"
+call :ok "[4/19] EXCEL.EXE: !OFFICE_FOUND!"
 goto :step_4_pptx
 :excel_missing
-call :info "[4/15] EXCEL.EXE: not found - Excel support optional, OK to skip if you do not use Excel"
+call :info "[4/19] EXCEL.EXE: not found - Excel support optional, OK to skip if you do not use Excel"
 :step_4_pptx
 call :find_office_app POWERPNT.EXE
 if not defined OFFICE_FOUND goto :pptx_missing
-call :ok "[4/15] POWERPNT.EXE: !OFFICE_FOUND!"
+call :ok "[4/19] POWERPNT.EXE: !OFFICE_FOUND!"
 goto :step_5
 :pptx_missing
-call :info "[4/15] POWERPNT.EXE: not found - PowerPoint support optional, OK to skip if you do not use PowerPoint"
+call :info "[4/19] POWERPNT.EXE: not found - PowerPoint support optional, OK to skip if you do not use PowerPoint"
 :step_5
 
 REM ---------------------------------------------------------------
-REM [5/15] Office apps currently running
+REM [5/19] Office apps currently running
 REM ---------------------------------------------------------------
 call :running_check WINWORD.EXE Word
 call :running_check EXCEL.EXE Excel
 call :running_check POWERPNT.EXE PowerPoint
 
 REM ---------------------------------------------------------------
-REM [6/15] Dynamic CDP ports discovered
+REM [6/19] Dynamic CDP ports discovered
 REM ---------------------------------------------------------------
 if not defined CRI_INSTALLED goto :ports_no_deps
 set "PORTS_OUT=%TEMP%\claude-office-rtl.doctor.ports.txt"
@@ -114,15 +114,15 @@ popd
 set "PORTS_LINE="
 for /f "usebackq delims=" %%L in ("%PORTS_OUT%") do set "PORTS_LINE=%%L"
 if not defined PORTS_LINE set "PORTS_LINE=(no output)"
-call :info "[6/15] Dynamic CDP ports discovered: !PORTS_LINE!"
+call :info "[6/19] Dynamic CDP ports discovered: !PORTS_LINE!"
 if exist "%PORTS_OUT%" del /q "%PORTS_OUT%" >nul 2>&1
 goto :step_7
 :ports_no_deps
-call :info "[6/15] Dynamic CDP ports: deps not installed - run install.bat to enable port discovery"
+call :info "[6/19] Dynamic CDP ports: deps not installed - run install.bat to enable port discovery"
 :step_7
 
 REM ---------------------------------------------------------------
-REM [7/15] Active Claude targets (per Office app)
+REM [7/19] Active Claude targets (per Office app)
 REM ---------------------------------------------------------------
 if not defined CRI_INSTALLED goto :targets_no_deps
 set "TARGETS_OUT=%TEMP%\claude-office-rtl.doctor.targets.txt"
@@ -133,15 +133,15 @@ popd
 set "TARGETS_LINE="
 for /f "usebackq delims=" %%L in ("%TARGETS_OUT%") do set "TARGETS_LINE=%%L"
 if not defined TARGETS_LINE set "TARGETS_LINE=(no output)"
-call :info "[7/15] Active Claude targets: !TARGETS_LINE!"
+call :info "[7/19] Active Claude targets: !TARGETS_LINE!"
 if exist "%TARGETS_OUT%" del /q "%TARGETS_OUT%" >nul 2>&1
 goto :step_8
 :targets_no_deps
-call :info "[7/15] Active Claude targets: deps not installed - run install.bat to enable target discovery"
+call :info "[7/19] Active Claude targets: deps not installed - run install.bat to enable target discovery"
 :step_8
 
 REM ---------------------------------------------------------------
-REM [8/15] Injector PID file + alive
+REM [8/19] Injector PID file + alive
 REM ---------------------------------------------------------------
 set "INJ_PIDFILE=%TEMP%\claude-word-rtl.pid"
 set "INJ_PID="
@@ -149,17 +149,17 @@ if exist "%INJ_PIDFILE%" set /p INJ_PID=<"%INJ_PIDFILE%"
 if not defined INJ_PID goto :inj_no_pidfile
 tasklist /FI "PID eq %INJ_PID%" 2>nul | "%SystemRoot%\System32\find.exe" "%INJ_PID%" >nul
 if errorlevel 1 goto :inj_stale
-call :ok "[8/15] Injector: running, PID %INJ_PID%"
+call :ok "[8/19] Injector: running, PID %INJ_PID%"
 goto :step_9
 :inj_stale
-call :warn "[8/15] Injector: stale PID file at %INJ_PIDFILE% - node.exe with that PID is not running"
+call :warn "[8/19] Injector: stale PID file at %INJ_PIDFILE% - node.exe with that PID is not running"
 goto :step_9
 :inj_no_pidfile
-call :warn "[8/15] Injector: not running - Connect via tray, or launch a wrapper"
+call :warn "[8/19] Injector: not running - Connect via tray, or launch a wrapper"
 :step_9
 
 REM ---------------------------------------------------------------
-REM [9/15] Injector aggregate status file
+REM [9/19] Injector aggregate status file
 REM ---------------------------------------------------------------
 set "STATUS_FILE=%TEMP%\claude-word-rtl.status"
 if not exist "%STATUS_FILE%" goto :status_missing
@@ -169,11 +169,11 @@ if not defined STATUS_LINE set "STATUS_LINE=(empty)"
 call :report_status "!STATUS_LINE!"
 goto :step_10
 :status_missing
-call :info "[9/15] Aggregate status file: missing - injector has not written %STATUS_FILE% yet"
+call :info "[9/19] Aggregate status file: missing - injector has not written %STATUS_FILE% yet"
 :step_10
 
 REM ---------------------------------------------------------------
-REM [10/15] Per-app injector status (v0.2.0+)
+REM [10/19] Per-app injector status (v0.2.0+)
 REM ---------------------------------------------------------------
 set "APPS_STATUS=%TEMP%\claude-office-rtl.apps.json"
 if not exist "%APPS_STATUS%" goto :apps_status_missing
@@ -183,15 +183,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $j = Get-Content -
 set "APPS_LINE="
 for /f "usebackq delims=" %%L in ("%APPS_OUT%") do set "APPS_LINE=%%L"
 if not defined APPS_LINE set "APPS_LINE=(no output)"
-call :info "[10/15] Per-app status: !APPS_LINE!"
+call :info "[10/19] Per-app status: !APPS_LINE!"
 if exist "%APPS_OUT%" del /q "%APPS_OUT%" >nul 2>&1
 goto :step_11
 :apps_status_missing
-call :info "[10/15] Per-app status: file missing at %APPS_STATUS% - injector may be from older version, or not running"
+call :info "[10/19] Per-app status: file missing at %APPS_STATUS% - injector may be from older version, or not running"
 :step_11
 
 REM ---------------------------------------------------------------
-REM [11/15] Tray PID file + alive
+REM [11/19] Tray PID file + alive
 REM ---------------------------------------------------------------
 set "TRAY_PIDFILE=%TEMP%\claude-word-rtl.tray.pid"
 set "TRAY_PID="
@@ -199,28 +199,28 @@ if exist "%TRAY_PIDFILE%" set /p TRAY_PID=<"%TRAY_PIDFILE%"
 if not defined TRAY_PID goto :tray_no_pidfile
 tasklist /FI "PID eq %TRAY_PID%" 2>nul | "%SystemRoot%\System32\find.exe" "%TRAY_PID%" >nul
 if errorlevel 1 goto :tray_stale
-call :ok "[11/15] Tray process: running, PID %TRAY_PID%"
+call :ok "[11/19] Tray process: running, PID %TRAY_PID%"
 goto :step_12
 :tray_stale
-call :warn "[11/15] Tray process: stale PID file at %TRAY_PIDFILE% - tray not actually running"
+call :warn "[11/19] Tray process: stale PID file at %TRAY_PIDFILE% - tray not actually running"
 goto :step_12
 :tray_no_pidfile
-call :warn "[11/15] Tray process: not running - double-click scripts\start-tray.vbs or log out and back in"
+call :warn "[11/19] Tray process: not running - double-click scripts\start-tray.vbs or log out and back in"
 :step_12
 
 REM ---------------------------------------------------------------
-REM [12/15] Startup folder shortcut
+REM [12/19] Startup folder shortcut
 REM ---------------------------------------------------------------
 set "STARTUP_LNK=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\Claude for Word RTL Tray.lnk"
 if not exist "%STARTUP_LNK%" goto :startup_missing
-call :ok "[12/15] Startup entry 'Claude for Word RTL Tray': present, tray auto-launches at login"
+call :ok "[12/19] Startup entry 'Claude for Word RTL Tray': present, tray auto-launches at login"
 goto :step_13
 :startup_missing
-call :warn "[12/15] Startup entry 'Claude for Word RTL Tray': missing - run install.bat to create it"
+call :warn "[12/19] Startup entry 'Claude for Word RTL Tray': missing - run install.bat to create it"
 :step_13
 
 REM ---------------------------------------------------------------
-REM [13/15] Apps and Features registration
+REM [13/19] Apps and Features registration
 REM ---------------------------------------------------------------
 set "REGKEY=HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeWordRTL"
 reg query "%REGKEY%" >nul 2>&1
@@ -228,17 +228,17 @@ if errorlevel 1 goto :appsfeat_missing
 set "DISPLAY_VER="
 for /f "tokens=2,*" %%a in ('reg query "%REGKEY%" /v DisplayVersion 2^>nul ^| "%SystemRoot%\System32\find.exe" /I "DisplayVersion"') do set "DISPLAY_VER=%%b"
 if not defined DISPLAY_VER goto :appsfeat_no_ver
-call :ok "[13/15] Apps and Features registration: present, DisplayVersion=!DISPLAY_VER!"
+call :ok "[13/19] Apps and Features registration: present, DisplayVersion=!DISPLAY_VER!"
 goto :step_14
 :appsfeat_no_ver
-call :ok "[13/15] Apps and Features registration: present, DisplayVersion not readable"
+call :ok "[13/19] Apps and Features registration: present, DisplayVersion not readable"
 goto :step_14
 :appsfeat_missing
-call :warn "[13/15] Apps and Features registration: missing - tool will not show in Settings, tray Uninstall still works"
+call :warn "[13/19] Apps and Features registration: missing - tool will not show in Settings, tray Uninstall still works"
 :step_14
 
 REM ---------------------------------------------------------------
-REM [14/15] Legacy env var must NOT be persisted (CRITICAL)
+REM [14/19] Legacy env var must NOT be persisted (CRITICAL)
 REM ---------------------------------------------------------------
 REM v0.2.0+ NEVER writes HKCU\Environment\WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS.
 REM v0.1.0 - v0.1.3 wrote it as the Auto-enable mechanism. EDR products treat
@@ -253,19 +253,19 @@ set "LEGACY_HIT="
 if /I "%LEGACY_VAL%"=="--remote-debugging-port=9222" set "LEGACY_HIT=1"
 if /I "%LEGACY_VAL%"=="--remote-debugging-port=0" set "LEGACY_HIT=1"
 if defined LEGACY_HIT goto :legacy_fail
-call :info "[14/15] Legacy env var %LEGACY_VAR_NAME% is set to a non-default value '%LEGACY_VAL%' - we did not write this and we will not touch it"
+call :info "[14/19] Legacy env var %LEGACY_VAR_NAME% is set to a non-default value '%LEGACY_VAL%' - we did not write this and we will not touch it"
 goto :step_15
 :legacy_fail
-call :fail "[14/15] Legacy env var %LEGACY_VAR_NAME% IS SET to '%LEGACY_VAL%' - this is an EDR trigger, v0.2.0+ never writes it"
+call :fail "[14/19] Legacy env var %LEGACY_VAR_NAME% IS SET to '%LEGACY_VAL%' - this is an EDR trigger, v0.2.0+ never writes it"
 call :log "         Fix: run uninstall.bat - clears it automatically. Or manually:"
 call :log "           reg delete HKCU\Environment /v %LEGACY_VAR_NAME% /f"
 goto :step_15
 :legacy_ok
-call :ok "[14/15] Legacy env var %LEGACY_VAR_NAME%: not set, correct for v0.2.0+"
+call :ok "[14/19] Legacy env var %LEGACY_VAR_NAME%: not set, correct for v0.2.0+"
 :step_15
 
 REM ---------------------------------------------------------------
-REM [15/15] WebView2 runtime
+REM [15/19] WebView2 runtime
 REM ---------------------------------------------------------------
 set "WV2_FOUND="
 reg query "HKLM\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}" >nul 2>&1
@@ -275,10 +275,86 @@ reg query "HKLM\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-0
 if not errorlevel 1 set "WV2_FOUND=HKLM\SOFTWARE"
 if not defined WV2_FOUND goto :wv2_missing
 :wv2_ok
-call :ok "[15/15] WebView2 runtime: installed, key %WV2_FOUND%"
-goto :summary
+call :ok "[15/19] WebView2 runtime: installed, key %WV2_FOUND%"
+goto :step_16
 :wv2_missing
-call :fail "[15/15] WebView2 runtime: not detected - Claude add-in will not render"
+call :fail "[15/19] WebView2 runtime: not detected - Claude add-in will not render"
+:step_16
+
+REM ---------------------------------------------------------------
+REM [16/19] OUTLOOK.EXE installed (optional, opt-in app)
+REM ---------------------------------------------------------------
+REM Outlook lives next to Word/Excel/PowerPoint in the same Office16 folder
+REM regardless of Click-to-Run vs MSI. We do NOT distinguish New Outlook
+REM (olk.exe) here - it is intentionally not supported (probe/README.md M0
+REM result was DEFER for New Outlook, GO for classic). All four 16/17/18/19
+REM checks are :info because Outlook is opt-in: a user who never wants to
+REM Connect Outlook can ignore the entire group.
+call :find_office_app OUTLOOK.EXE
+if not defined OFFICE_FOUND goto :outlook_not_installed
+call :info "[16/19] OUTLOOK.EXE: !OFFICE_FOUND!"
+goto :step_17
+:outlook_not_installed
+call :info "[16/19] OUTLOOK.EXE: not found - Outlook RTL support unavailable, OK to skip if you do not use Outlook"
+:step_17
+
+REM ---------------------------------------------------------------
+REM [17/19] Outlook process currently running
+REM ---------------------------------------------------------------
+REM Reuses :running_check but with a custom step prefix. The shared helper
+REM hardcodes "[5/19]" in its log message, so we cannot call it for step 17
+REM without re-prefixing. Inline the same tasklist test instead.
+tasklist /FI "IMAGENAME eq OUTLOOK.EXE" 2>nul | "%SystemRoot%\System32\find.exe" /I "OUTLOOK.EXE" >nul
+if errorlevel 1 goto :outlook_not_running
+call :info "[17/19] Outlook running: yes"
+goto :step_18
+:outlook_not_running
+call :info "[17/19] Outlook running: no"
+:step_18
+
+REM ---------------------------------------------------------------
+REM [18/19] Outlook CDP target via dynamic-port discovery
+REM ---------------------------------------------------------------
+REM Filters discoverActiveTargets() to entries the discovery layer tagged as
+REM Outlook (via _host_Info=Outlook$...). If empty, either Outlook is not
+REM running with the WebView2 debug flag (most common) or the panel is closed.
+REM Either way it is :info, not :warn - a user with Outlook open and the
+REM panel collapsed should not see a yellow line in doctor.log.
+if not defined CRI_INSTALLED goto :outlook_target_no_deps
+set "OL_TARGETS_OUT=%TEMP%\claude-office-rtl.doctor.outlook-targets.txt"
+if exist "%OL_TARGETS_OUT%" del /q "%OL_TARGETS_OUT%" >nul 2>&1
+pushd "%HERE%"
+node -e "const p=require('./scripts/port-discovery'); p.discoverActiveTargets().then(arr=>{const ol=arr.filter(r=>r.app&&r.app.name==='Outlook'); console.log(ol.length===0?'(none)':ol.map(r=>'port='+r.port).join(', '))}).catch(e=>console.log('ERR: '+e.message))" > "%OL_TARGETS_OUT%" 2>&1
+popd
+set "OL_TARGETS_LINE="
+for /f "usebackq delims=" %%L in ("%OL_TARGETS_OUT%") do set "OL_TARGETS_LINE=%%L"
+if not defined OL_TARGETS_LINE set "OL_TARGETS_LINE=(no output)"
+call :info "[18/19] Outlook CDP target: !OL_TARGETS_LINE!"
+if exist "%OL_TARGETS_OUT%" del /q "%OL_TARGETS_OUT%" >nul 2>&1
+goto :step_19
+:outlook_target_no_deps
+call :info "[18/19] Outlook CDP target: deps not installed - run install.bat to enable target discovery"
+:step_19
+
+REM ---------------------------------------------------------------
+REM [19/19] Outlook entry in per-app status file
+REM ---------------------------------------------------------------
+REM Read the Outlook key from apps.json. Step 10 already reports Word/Excel/
+REM PowerPoint together; we keep step 10 unchanged for backward-compatible
+REM diagnostic output and add Outlook here as its own line so a user
+REM scanning the log for Outlook-only state has one obvious place to look.
+if not exist "%APPS_STATUS%" goto :outlook_apps_status_missing
+set "OL_APPS_OUT=%TEMP%\claude-office-rtl.doctor.outlook-apps.txt"
+if exist "%OL_APPS_OUT%" del /q "%OL_APPS_OUT%" >nul 2>&1
+powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $j = Get-Content -Raw -LiteralPath $env:APPS_STATUS | ConvertFrom-Json; $v = $j.Outlook; if (-not $v) { 'Outlook: (missing)' } else { 'Outlook: ' + $v } } catch { 'ERR: ' + $_.Exception.Message }" > "%OL_APPS_OUT%" 2>&1
+set "OL_APPS_LINE="
+for /f "usebackq delims=" %%L in ("%OL_APPS_OUT%") do set "OL_APPS_LINE=%%L"
+if not defined OL_APPS_LINE set "OL_APPS_LINE=(no output)"
+call :info "[19/19] Per-app status (Outlook): !OL_APPS_LINE!"
+if exist "%OL_APPS_OUT%" del /q "%OL_APPS_OUT%" >nul 2>&1
+goto :summary
+:outlook_apps_status_missing
+call :info "[19/19] Per-app status (Outlook): file missing at %APPS_STATUS% - injector may be from older version, or not running"
 :summary
 
 call :log ""
@@ -349,24 +425,24 @@ goto :eof
 REM In: %1 = exe name, %2 = friendly name
 tasklist /FI "IMAGENAME eq %~1" 2>nul | "%SystemRoot%\System32\find.exe" /I "%~1" >nul
 if errorlevel 1 goto :running_no
-call :info "[5/15] %~2 running: yes"
+call :info "[5/19] %~2 running: yes"
 goto :eof
 :running_no
-call :info "[5/15] %~2 running: no"
+call :info "[5/19] %~2 running: no"
 goto :eof
 
 :report_status
 REM In: %1 = status string from %TEMP%\claude-word-rtl.status. May contain
 REM ')' (e.g. 'ERROR:foo (bar)'), so we never enter a paren block here.
 set "STATUS_VAL=%~1"
-if /I "%STATUS_VAL%"=="CONNECTED" call :ok "[9/15] Aggregate status: CONNECTED"
+if /I "%STATUS_VAL%"=="CONNECTED" call :ok "[9/19] Aggregate status: CONNECTED"
 if /I "%STATUS_VAL%"=="CONNECTED" goto :eof
-if /I "%STATUS_VAL%"=="DISCONNECTED" call :info "[9/15] Aggregate status: DISCONNECTED"
+if /I "%STATUS_VAL%"=="DISCONNECTED" call :info "[9/19] Aggregate status: DISCONNECTED"
 if /I "%STATUS_VAL%"=="DISCONNECTED" goto :eof
 echo %STATUS_VAL% | "%SystemRoot%\System32\findstr.exe" /I /B "ERROR:" >nul 2>&1
 if errorlevel 1 goto :report_status_other
-call :warn "[9/15] Aggregate status: %STATUS_VAL%"
+call :warn "[9/19] Aggregate status: %STATUS_VAL%"
 goto :eof
 :report_status_other
-call :info "[9/15] Aggregate status: %STATUS_VAL%"
+call :info "[9/19] Aggregate status: %STATUS_VAL%"
 goto :eof

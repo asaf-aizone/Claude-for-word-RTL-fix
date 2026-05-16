@@ -143,7 +143,7 @@ REM uninstall.bat, which is what both this key and the tray's Uninstall
 REM menu item invoke.
 set "REGKEY=HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeWordRTL"
 reg add "%REGKEY%" /v DisplayName     /t REG_SZ /d "Claude for Word RTL Fix" /f >nul 2>&1
-reg add "%REGKEY%" /v DisplayVersion  /t REG_SZ /d "0.2.2" /f >nul 2>&1
+reg add "%REGKEY%" /v DisplayVersion  /t REG_SZ /d "0.3.0" /f >nul 2>&1
 reg add "%REGKEY%" /v Publisher       /t REG_SZ /d "Asaf Abramzon" /f >nul 2>&1
 reg add "%REGKEY%" /v InstallLocation /t REG_SZ /d "%HERE%" /f >nul 2>&1
 reg add "%REGKEY%" /v UninstallString /t REG_SZ /d "\"%HERE%\uninstall.bat\"" /f >nul 2>&1

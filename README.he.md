@@ -1,6 +1,6 @@
 <div dir="rtl">
 
-# Claude for Office RTL Fix (Word, Excel, PowerPoint)
+# Claude for Office RTL Fix (Word, Excel, PowerPoint, Outlook)
 
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-blue)](https://www.microsoft.com/windows)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
@@ -10,9 +10,9 @@
 
 **גרסה מלאה (דו-לשונית, עם צילומי מסך ותמונות): [README.md](README.md)** · **יומן שינויים: [CHANGELOG.md](CHANGELOG.md)**
 
-תיקון CSS וטיפוגרפיה בצד הלקוח לתצוגה העברית בתוסף Claude ל-Microsoft Word, Excel ו-PowerPoint. החל מ-v0.2.0 הכלי תומך בשלוש האפליקציות בו-זמנית. שם המאגר ב-GitHub עודכן ב-v0.2.1 ל-`Claude-for-Office-RTL-fix` (היה `Claude-for-word-RTL-fix`). GitHub מחזיק redirect קבוע מהשם הישן, אז clones ו-bookmarks מגרסאות קודמות ממשיכים לעבוד.
+תיקון CSS וטיפוגרפיה בצד הלקוח לתצוגה העברית בתוסף Claude ל-Microsoft Word, Excel, PowerPoint ו-Outlook. החל מ-v0.2.0 הכלי תומך ב-Word/Excel/PowerPoint בו-זמנית. **v0.3.0 הוסיף את Outlook הקלאסי** מאחורי מודל opt-in מוקשח (אישור מפורש לכל הפעלה, ניתוק אוטומטי אחרי 15 דקות, redaction של ה-URL בלוג). שם המאגר ב-GitHub עודכן ב-v0.2.1 ל-`Claude-for-Office-RTL-fix` (היה `Claude-for-word-RTL-fix`). GitHub מחזיק redirect קבוע מהשם הישן, אז clones ו-bookmarks מגרסאות קודמות ממשיכים לעבוד.
 
-תוסף Claude הרשמי ל-Office מציג כיום טקסט עברי משמאל לימין, עם סימני רשימה ופיסוק בצד הלא נכון. הכלי הזה מתחבר לחלונית WebView2 של התוסף בכל אחת משלוש האפליקציות באמצעות Chrome DevTools Protocol הסטנדרטי, ומזריק גיליון סגנונות וכן MutationObserver קטן כדי לתקן את התצוגה.
+תוסף Claude הרשמי ל-Office מציג כיום טקסט עברי משמאל לימין, עם סימני רשימה ופיסוק בצד הלא נכון. הכלי הזה מתחבר לחלונית WebView2 של התוסף בכל אחת מארבע האפליקציות באמצעות Chrome DevTools Protocol הסטנדרטי, ומזריק גיליון סגנונות וכן MutationObserver קטן כדי לתקן את התצוגה.
 
 הכלי קיים מטעמי נגישות: דוברי עברית זקוקים לתצוגת RTL כדי לקרוא את תשובות Claude בחלונית. בלי התיקון העברית מוצגת LTR עם טיפול bidi שבור, והפאנל בפועל לא שמיש. מדובר בהתאמת נגישות ליציאה שמוצגת מקומית, בדומה לגיליון סגנונות של משתמש (Stylus/Stylish), קורא מסך או מזריק dark-mode. השירות עצמו לא משתנה בשום צורה.
 
@@ -63,11 +63,14 @@
 
 ## הערת אבטחה
 
-בזמן ש-Word, Excel או PowerPoint פועלים דרך הכלי הזה, ה-WebView2 של אותה אפליקציה פותח פורט דיבאג על localhost בפורט דינמי (אחד לכל תהליך WebView2 host של Office; ב-v0.2.0 משתמשים ב-`--remote-debugging-port=0`, במקום `9222` הקבוע מ-v0.1.x). משמעות הדבר שכל תהליך מקומי אחר במחשב שלך יכול להתחבר ל-DOM של חלונית Claude (לקרוא טיוטות, עוגיות סשן וכדומה). הפורט הוא localhost בלבד, לא חשוף לרשת, אבל הוא לא דורש אימות.
+בזמן ש-Word, Excel, PowerPoint או Outlook פועלים דרך הכלי הזה, ה-WebView2 של אותה אפליקציה פותח פורט דיבאג על localhost בפורט דינמי (אחד לכל תהליך WebView2 host של Office; ב-v0.2.0 משתמשים ב-`--remote-debugging-port=0`, במקום `9222` הקבוע מ-v0.1.x). משמעות הדבר שכל תהליך מקומי אחר במחשב שלך יכול להתחבר ל-DOM של חלונית Claude (לקרוא טיוטות, עוגיות סשן וכדומה). הפורט הוא localhost בלבד, לא חשוף לרשת, אבל הוא לא דורש אימות.
+
+**Outlook ספציפית (חדש ב-v0.3.0):** כשמשתמש מבקש מ-Claude לסכם מייל או לנסח תגובה, תוכן המייל הופך לחלק מה-DOM של הפאנל. ה-CDP attach חושף אותו לכל תהליך מקומי. החשיפה צרה בזמן (רק כשהפעולה רצה) אבל הקטגוריה רגישה יותר - לכן Outlook מוגן בארבע שכבות שלא פעילות עבור Word/Excel/PowerPoint: (1) opt-in מפורש לכל הפעלה דרך דיאלוג עם Cancel כברירת מחדל ממוקדת, (2) אין auto-launch של ה-injector אם רק Outlook פתוח, (3) ניתוק אוטומטי אחרי 15 דקות, (4) URL redaction בלוג. בנוסף יש פריט תפריט ייעודי **Disconnect Outlook only** שמנתק רק את Outlook בלי לפגוע בשאר. ראו [docs/security.md](docs/security.md#outlook-specific-risks-and-mitigations) לפרטים.
 
 המלצות:
 
 - סגרו את האפליקציה (Word/Excel/PowerPoint) כשאתם לא משתמשים ב-Claude באופן פעיל.
+- ב-Outlook: השתמשו ב-Disconnect Outlook only בסוף סשן מייל, אל תסמכו רק על הטיימר של 15 דקות.
 - אל תריצו את הכלי על מחשבים משותפים או מחשבים עם תוכנות לא מהימנות.
 - במחשבים מנוהלים ארגונית (EDR, DLP), בדקו תחילה עם ה-IT.
 
@@ -76,7 +79,7 @@
 ## דרישות
 
 - **Windows 10 או 11 בלבד.** macOS ו-Linux לא נתמכים (ראו למעלה).
-- Microsoft Office (דסקטופ) - לפחות אחת מבין Word, Excel ו-PowerPoint, עם התוסף Claude מותקן
+- Microsoft Office (דסקטופ) - לפחות אחת מבין Word, Excel, PowerPoint, או Outlook הקלאסי, עם התוסף Claude מותקן. תמיכת Outlook היא opt-in; מי שלא רוצה לחבר את Outlook יכול להתעלם מהפיצ'ר לחלוטין. New Outlook (`olk.exe`) לא נתמך
 - [Node.js](https://nodejs.org/) 16 או חדש יותר (מותקן ונמצא ב-PATH)
 
 ## התקנה
@@ -93,13 +96,16 @@
 
 אייקון המגש הוא נקודת הכניסה היחידה:
 
-1. פתחו את Word, Excel או PowerPoint כרגיל (דרך אייקון האפליקציה, קיצור דרך, מסמך, כל מה שאתם רגילים להשתמש בו).
-2. לחצו קליק ימני על אייקון המגש ליד השעון ובחרו **Connect Word** / **Connect Excel** / **Connect PowerPoint** לפי האפליקציה שפתוחה.
-3. המגש סוגר בצורה מנומסת את האפליקציה, מפעיל אותה מחדש דרך ה-wrapper המתאים עם דגל הדיבאג, ופותח מחדש את המסמכים/חוברות העבודה/מצגות שהיו פתוחים. עברית בפאנל של Claude עכשיו מוצגת RTL. אפשר לחזור על אותו תהליך גם עבור שתי האפליקציות האחרות בו-זמנית, וה-injector יחיד יטפל בכולן.
+1. פתחו את Word, Excel, PowerPoint או Outlook כרגיל (דרך אייקון האפליקציה, קיצור דרך, מסמך, כל מה שאתם רגילים להשתמש בו).
+2. לחצו קליק ימני על אייקון המגש ליד השעון ובחרו **Connect Word** / **Connect Excel** / **Connect PowerPoint** / **Connect Outlook** לפי האפליקציה שפתוחה.
+3. עבור Word/Excel/PowerPoint: המגש סוגר בצורה מנומסת את האפליקציה, מפעיל אותה מחדש דרך ה-wrapper המתאים עם דגל הדיבאג, ופותח מחדש את המסמכים/חוברות העבודה/מצגות שהיו פתוחים. עברית בפאנל של Claude עכשיו מוצגת RTL.
+4. עבור Outlook (opt-in): המגש מציג קודם דיאלוג אזהרה מפורט על חשיפת תוכן מייל ל-DOM של הפאנל. ברירת המחדל הממוקדת היא Cancel - לחיצת Enter בטעות לא מאשרת. רק אחרי OK מפורש המגש סוגר את Outlook ומפעיל אותו מחדש דרך `outlook-wrapper.bat` שכותב דגל opt-in זמני. ה-injector חוסם את Outlook אוטומטית ללא הדגל הזה. החיבור מתנתק אוטומטית אחרי 15 דקות, או ידנית עם **Disconnect Outlook only** בתפריט.
 
-סטטוס המגש במבט: ירוק, מחובר. אדום, מנותק או שגיאה. אפור, בהפעלה. בראש התפריט יש שלוש שורות סטטוס מנוטרלות לקריאה בלבד (Word, Excel, PowerPoint - כל אחת במצב connected, not running, running without RTL, או error). מתחתיהן שלושה פריטים פעילים **Connect Word**, **Connect Excel**, **Connect PowerPoint**, ולאחר מכן פעולה אחת של **Disconnect all** שסוגרת את כל אפליקציות ה-Office וה-injector. בנוסף יש **Show diagnostic log**, **Check for updates...**, **Uninstall...** ו-**Exit**. אין יותר checkbox של Auto-enable - הוא הוסר בגרסה v0.1.4 משיקולי אבטחה (טריגר ל-EDR ארגוני).
+אפשר לחבר את כל ארבעת האפליקציות בו-זמנית, וה-injector יחיד יטפל בכולן.
 
-לא משונים שיוכי קבצים, לא מתווספות רשומות לתפריט ההתחלה, ו-Word/Excel/PowerPoint עצמם לא מתוקנים.
+סטטוס המגש במבט: ירוק, מחובר. אדום, מנותק או שגיאה. אפור, בהפעלה. בראש התפריט יש ארבע שורות סטטוס מנוטרלות לקריאה בלבד (Word, Excel, PowerPoint, Outlook - כל אחת במצב connected, not running, running without RTL, או error). מתחתיהן ארבעה פריטי Connect: **Connect Word**, **Connect Excel**, **Connect PowerPoint** ו-**Connect Outlook** (האחרון מציג דיאלוג opt-in לפני כל הפעלה). ולאחר מכן **Disconnect Outlook only** (פעיל רק כש-Outlook מחובר) ו-**Disconnect all** שסוגרת את Word/Excel/PowerPoint וה-injector אבל **לא** סוגרת את Outlook עצמו. בנוסף יש **Show diagnostic log**, **Check for updates...**, **Uninstall...** ו-**Exit**. אין יותר checkbox של Auto-enable - הוא הוסר בגרסה v0.1.4 משיקולי אבטחה (טריגר ל-EDR ארגוני).
+
+לא משונים שיוכי קבצים, לא מתווספות רשומות לתפריט ההתחלה, ו-Word/Excel/PowerPoint/Outlook עצמם לא מתוקנים.
 
 ### מצב דיבאג (אופציונלי)
 
@@ -127,13 +133,13 @@
 
 ## אבחון, סטטוס ועדכונים
 
-- **אייקון מגש** (tray) - אייקון קטן ליד השעון (ריבוע מעוגל עם האות **O** (Office) וחץ RTL לבנים, וצבע רקע שמשקף את המצב), מופעל אוטומטית בכניסה למערכת מתיקיית ה-Startup. ירוק, ה-injector מחובר לפאנל של Claude. אדום, מנותק או שדווחה שגיאה. אפור, בהפעלה. ראו את [האייקון במצב אדום (מנותק)](docs/images/tray-icon-red.png) ובמצב [ירוק (מחובר)](docs/images/tray-icon-green.png). לחיצה ימנית פותחת תפריט. בראש התפריט - שלוש שורות סטטוס לכל אחת משלוש האפליקציות, ולאחר מכן: **Connect Word** / **Connect Excel** / **Connect PowerPoint** - מפעילים את האפליקציה הנבחרת דרך ה-wrapper אם היא סגורה, או אם היא כבר פתוחה "רגיל" (המקרה הנפוץ), שואלים את המשתמש, סוגרים אותה בצורה מנומסת ומפעילים אותה מחדש עם RTL - כולל פתיחה אוטומטית של הקבצים שהיו פתוחים. **Disconnect all** - כפתור התאוששות כללי לכל שלוש האפליקציות: עוצר timers של Connect באמצע, סוגר כל אפליקציית Office פתוחה (מנומס + force כגיבוי), הורג את ה-injector, מנקה קבצי state. **Show diagnostic log** - פותח את `%TEMP%\claude-word-rtl.log` בעורך ברירת המחדל. **Check for updates...** - מריץ את `check-update.js` ומציג דיאלוג עם הסטטוס. אם יש גרסה חדשה, כפתור בלחיצה אחת פותח את דף ההורדה בדפדפן ברירת המחדל. **Uninstall...** - מציג אישור ואז מעביר את השליטה ל-`uninstall.bat` ויוצא. **Exit** - סוגר את ה-tray. רק מופע אחד של tray יכול לרוץ בכל רגע (נאכף ע"י mutex גלובלי), כדי שלא יראו שני אייקונים. בלי תלויות חדשות, הכל על בסיס `System.Windows.Forms.NotifyIcon` המובנה.
-- **`doctor.bat`** - סקריפט אבחון שמריץ 15 בדיקות (Node, npm, תלויות, זיהוי התקנה לכל אחת מ-Word/Excel/PowerPoint, האם כל אפליקציה רצה כעת, פורטי CDP דינמיים שזוהו, יעדי Claude פעילים לפי אפליקציה, תהליך ה-injector, סטטוס מצרפי, סטטוס לפי אפליקציה (`apps.json`), תהליך ה-tray, רשומת Startup, רישום Apps and Features, הבדיקה הקריטית שאוסרת על משתנה הסביבה הישן `HKCU\Environment\WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` לחזור, ו-WebView2 runtime) וכותב דוח לקובץ `doctor.log`. צרפו אותו כשמדווחים על תקלה.
+- **אייקון מגש** (tray) - אייקון קטן ליד השעון (ריבוע מעוגל עם האות **O** (Office) וחץ RTL לבנים, וצבע רקע שמשקף את המצב), מופעל אוטומטית בכניסה למערכת מתיקיית ה-Startup. ירוק, ה-injector מחובר לפאנל של Claude. אדום, מנותק או שדווחה שגיאה. אפור, בהפעלה. ראו את [האייקון במצב אדום (מנותק)](docs/images/tray-icon-red.png) ובמצב [ירוק (מחובר)](docs/images/tray-icon-green.png). לחיצה ימנית פותחת תפריט. בראש התפריט - ארבע שורות סטטוס לכל אחת מארבע האפליקציות (Word/Excel/PowerPoint/Outlook), ולאחר מכן: **Connect Word** / **Connect Excel** / **Connect PowerPoint** - מפעילים את האפליקציה הנבחרת דרך ה-wrapper אם היא סגורה, או אם היא כבר פתוחה "רגיל" (המקרה הנפוץ), שואלים את המשתמש, סוגרים אותה בצורה מנומסת ומפעילים אותה מחדש עם RTL - כולל פתיחה אוטומטית של הקבצים שהיו פתוחים. **Connect Outlook** - מסלול ייעודי opt-in עם דיאלוג אזהרה (ברירת מחדל Cancel) לפני כל הפעלה, כתיבת דגל opt-in זמני, ומסרב אם New Outlook (`olk.exe`) פתוח. **Disconnect Outlook only** - פעיל רק כש-Outlook מחובר, מנתק את ה-CDP של Outlook בלבד בלי לפגוע ב-Word/Excel/PowerPoint. **Disconnect all** - כפתור התאוששות כללי: עוצר timers של Connect באמצע, סוגר את Word/Excel/PowerPoint הפתוחים (מנומס + force כגיבוי), הורג את ה-injector, מנקה קבצי state ומבטל את דגל ה-opt-in של Outlook. **אינו סוגר את Outlook עצמו** (כי הוא opt-in וייתכן שהמשתמש פתח אותו רק לקריאת מייל); הריגת ה-injector ממילא מנתקת את ה-CDP. **Show diagnostic log** - פותח את `%TEMP%\claude-word-rtl.log` בעורך ברירת המחדל. **Check for updates...** - מריץ את `check-update.js` ומציג דיאלוג עם הסטטוס. אם יש גרסה חדשה, כפתור בלחיצה אחת פותח את דף ההורדה בדפדפן ברירת המחדל. **Uninstall...** - מציג אישור ואז מעביר את השליטה ל-`uninstall.bat` ויוצא. **Exit** - סוגר את ה-tray. רק מופע אחד של tray יכול לרוץ בכל רגע (נאכף ע"י mutex גלובלי), כדי שלא יראו שני אייקונים. בלי תלויות חדשות, הכל על בסיס `System.Windows.Forms.NotifyIcon` המובנה.
+- **`doctor.bat`** - סקריפט אבחון שמריץ 19 בדיקות (החל מ-v0.3.0; היו 15 ב-v0.2.x). הבדיקות: Node, npm, תלויות, זיהוי התקנה לכל אחת מ-Word/Excel/PowerPoint, האם כל אפליקציה רצה כעת, פורטי CDP דינמיים שזוהו, יעדי Claude פעילים לפי אפליקציה, תהליך ה-injector, סטטוס מצרפי, סטטוס לפי אפליקציה (`apps.json`), תהליך ה-tray, רשומת Startup, רישום Apps and Features, הבדיקה הקריטית שאוסרת על משתנה הסביבה הישן `HKCU\Environment\WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` לחזור, WebView2 runtime, וארבע בדיקות נוספות ייעודיות ל-Outlook: התקנה, תהליך רץ, target CDP, ומצב ב-`apps.json`. ארבע הבדיקות הללו כולן `INFO` כי Outlook הוא opt-in. הסקריפט כותב דוח לקובץ `doctor.log`. צרפו אותו כשמדווחים על תקלה.
 - **`check-update.bat`** - פונה ל-GitHub releases API ומודיע אם יש גרסה חדשה יותר. אין תלויות npm, משתמש ב-`https` המובנה של Node. **איך בודקים אם יש גרסה חדשה?** הריצו `check-update.bat` או תפריט הטריי "Check for updates...". השוואה מול GitHub releases API, ללא תלויות חיצוניות.
 
 ## איך זה עובד (פסקה אחת)
 
-לכל אחת משלוש האפליקציות יש wrapper משלה (`word-wrapper.bat`, `excel-wrapper.bat`, `powerpoint-wrapper.bat`). ה-wrapper מפעיל את האפליקציה עם משתנה הסביבה `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=0` - דגל של WebView2 המתועד אצל Microsoft שחושף את Chrome DevTools Protocol על פורט localhost דינמי. ערך 0 מאפשר ל-WebView2 לבחור פורט פנוי משלו לכל תהליך, מה שנדרש כשפועלות יותר מאפליקציית Office אחת בו-זמנית. המשתנה נשמר רק בהקשר של אותו תהליך wrapper ושל האפליקציה שהוא מפעיל - הוא לא מגיע ל-Teams, Outlook, Edge או כל WebView2 host אחר. `inject.js` יחיד מטפל בכל שלוש האפליקציות: בכל tick של 2 שניות הוא משתמש ב-`scripts/port-discovery.js` שמסקר את כל תהליכי `msedgewebview2.exe` דרך `tasklist`, ממפה אותם ל-LISTENING ports דרך `netstat`, ובודק כל פורט מועמד מול `/json/list` של CDP. עבור כל target הוא מזהה את האפליקציה (Word/Excel/Powerpoint) דרך הפרמטר `_host_Info=` ב-URL של הפאנל, מתחבר ב-WebSocket, וקורא ל-`Runtime.evaluate` כדי להזריק אלמנט `<style>` ו-`MutationObserver`. אייקון המגש מתזמר את התהליך: בלחיצה על Connect של אחת מהאפליקציות הוא סוגר את האפליקציה הקיימת (אחרי שחילץ את הקבצים הפתוחים דרך COM ProgId המתאים) ומפעיל אותה מחדש דרך ה-wrapper המתאים עם אותם קבצים. כל הפעילות מקומית במחשב שלכם.
+לכל אחת מארבע האפליקציות יש wrapper משלה (`word-wrapper.bat`, `excel-wrapper.bat`, `powerpoint-wrapper.bat`, `outlook-wrapper.bat`). ה-wrapper של Outlook גם כותב דגל opt-in זמני (`%TEMP%\claude-office-rtl.outlook-optin`) שה-injector בודק לפני שמתחבר. ה-wrapper מפעיל את האפליקציה עם משתנה הסביבה `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=0` - דגל של WebView2 המתועד אצל Microsoft שחושף את Chrome DevTools Protocol על פורט localhost דינמי. ערך 0 מאפשר ל-WebView2 לבחור פורט פנוי משלו לכל תהליך, מה שנדרש כשפועלות יותר מאפליקציית Office אחת בו-זמנית. המשתנה נשמר רק בהקשר של אותו תהליך wrapper ושל האפליקציה שהוא מפעיל - הוא לא מגיע ל-Teams, Outlook, Edge או כל WebView2 host אחר. `inject.js` יחיד מטפל בכל ארבע האפליקציות: בכל tick של 2 שניות הוא משתמש ב-`scripts/port-discovery.js` שמסקר את כל תהליכי `msedgewebview2.exe` דרך `tasklist`, ממפה אותם ל-LISTENING ports דרך `netstat`, ובודק כל פורט מועמד מול `/json/list` של CDP. עבור כל target הוא מזהה את האפליקציה (Word/Excel/Powerpoint/Outlook) דרך הפרמטר `_host_Info=` ב-URL של הפאנל, מתחבר ב-WebSocket, וקורא ל-`Runtime.evaluate` כדי להזריק אלמנט `<style>` ו-`MutationObserver`. אייקון המגש מתזמר את התהליך: בלחיצה על Connect של אחת מהאפליקציות הוא סוגר את האפליקציה הקיימת (אחרי שחילץ את הקבצים הפתוחים דרך COM ProgId המתאים) ומפעיל אותה מחדש דרך ה-wrapper המתאים עם אותם קבצים. כל הפעילות מקומית במחשב שלכם.
 
 ראו [docs/security.md](docs/security.md) למודל האיומים.
 

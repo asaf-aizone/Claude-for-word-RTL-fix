@@ -75,6 +75,29 @@ The `.bat`, `.vbs`, `.ps1`, and `.js` files in this repo are not code-signed. Wi
 
 Organizations with DLP, EDR, or Group Policy controls may detect WebView2 debug-port enablement on Office as anomalous behavior. This tool is not suitable for sealed corporate laptops without coordination with your IT/security team.
 
+## Outlook-specific risks and mitigations
+
+Outlook is supported (v0.3.0+) under a stricter security model than Word, Excel and PowerPoint. The reason: when the user asks the Claude add-in to summarize an email or draft a reply, the **content of the active email** becomes part of the panel DOM for the duration of that operation. The same CDP attach surface that lets the injector apply RTL CSS also lets any local process under the same user account read that DOM. For a Word document panel the comparable exposure is content the user explicitly pasted or pinned. For Outlook the exposure is mail itself, which can include credentials, MFA codes, legal documents, account recovery links, and tenant identifiers. The exposure window is short (only while a summarize/draft is in flight), but the content class is qualitatively more sensitive.
+
+Because of this, Outlook has the following additional protections that **do not** apply to Word/Excel/PowerPoint:
+
+- **No silent attach.** The injector maintains a per-app block list (`lib/office-apps.js` `BLOCKED_HOST_INFO_KEYS`). Outlook is permanently on it. Discovery still finds the Outlook CDP target each tick, but the injector logs it as blocked and does not attach. Attach happens only when a per-launch opt-in flag file (`%TEMP%\claude-office-rtl.outlook-optin`) exists. The flag is **never persisted across injector restarts** - the injector clears it at startup.
+- **No auto-launch.** When any Word/Excel/PowerPoint app is up but the injector is gone (crash, manual kill), the tray relaunches the injector automatically. Outlook is excluded from this trigger - if Outlook is the only Office app running, the injector stays down. The user must explicitly pick **Connect Outlook** to start a session.
+- **Per-launch warning dialog.** **Connect Outlook** shows a OK/Cancel dialog whose default focused button is Cancel, naming the exact exposure ("local process can read panel DOM while attached") rather than hand-waving about "security". A stray Enter press does not opt the user in.
+- **Strict target filter.** The injector validates the CDP target's `_host_Info=` URL parameter before attaching: it URL-decodes the value, takes the first `$`-delimited segment, lowercases it, and compares it for equality against `outlook`. A target whose `_host_Info=` does not start with an `Outlook`-family token is not classified as Outlook and is not gated by the Outlook opt-in. Note that the comparison is case-insensitive on the first segment, so this filter does not by itself defeat a local process that constructs its own WebView2 with a forged `_host_Info=`; defence-in-depth for that scenario relies on the opt-in flag and the auto-disconnect timer (above), not on the filter alone.
+- **Auto-disconnect after 15 minutes.** Even if the user forgets to disconnect, the injector tears the Outlook CDP client down after 15 minutes of continuous attachment and revokes the opt-in flag. The user must click **Connect Outlook** again to start a new session. Tunable in source via `OUTLOOK_AUTO_DISCONNECT_MIN` in `scripts/inject.js`.
+- **URL redaction in the diagnostic log.** The Office add-in URL contains an `et=` parameter holding base64-encoded tenant metadata (account id, tenant id, expiry). For Outlook only, the injector strips every query parameter from logged URLs except `_host_Info=` and replaces the rest with `[redacted]`. The log still shows enough to diagnose connection problems but no longer leaks tenant identifiers to anyone with read access to `%TEMP%`.
+- **Disconnect Outlook only.** The tray menu item **Disconnect Outlook only** drops the Outlook CDP attachment without closing Outlook itself and without affecting Word/Excel/PowerPoint sessions. Use it when you are done with mail but still working in another Office app. Implementation: the tray writes a request file the injector polls each tick; the injector closes the Outlook CDP client(s), clears the auto-disconnect timer, and revokes the opt-in flag.
+
+**Recommendations for Outlook users:**
+
+- Keep Outlook closed when not in active use, or use **Disconnect Outlook only** between mail sessions instead of relying on the 15-minute timer.
+- Treat the warning dialog as a real consent gate. Click Cancel if you are not currently planning to use Claude on a specific email.
+- The 15-minute auto-disconnect is a backstop, not a budget. There is no business case for an 8-hour mail day with the CDP port continuously open.
+- New Outlook (`olk.exe`) is intentionally not supported. The probe in M0 deferred it, and the **Connect Outlook** flow refuses to launch if New Outlook is detected to avoid colliding on shared per-user state. If you have both installed, close New Outlook before connecting.
+
+For the full design rationale and the M0 evidence that motivated the opt-in model, see `docs/OUTLOOK-EXPANSION-PLAN.md` sections 3 and 4 and `probe/README.md` "silent CDP attach".
+
 ## What the tool does not do
 
 - Does not open any outbound network connection from its own code. The only network activity is:

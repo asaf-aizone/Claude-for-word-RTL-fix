@@ -69,6 +69,17 @@ if exist "%TRAYPIDFILE%" (
 
 if exist "%TEMP%\claude-word-rtl.lock"   del /q "%TEMP%\claude-word-rtl.lock"   >nul 2>&1
 if exist "%TEMP%\claude-word-rtl.status" del /q "%TEMP%\claude-word-rtl.status" >nul 2>&1
+REM v0.2.0+ per-app status file. Always remove on uninstall so a stale
+REM JSON cannot mislead a future tray (from a separate install) into
+REM rendering wrong status labels.
+if exist "%TEMP%\claude-office-rtl.apps.json" del /q "%TEMP%\claude-office-rtl.apps.json" >nul 2>&1
+REM v0.3.0+ Outlook opt-in flag. The injector clears it at startup too,
+REM but a clean uninstall should leave nothing behind in case a future
+REM install path differs. Same for the Disconnect-only IPC request file
+REM - if the user uninstalls mid-request, do not leave it around to
+REM trigger a phantom detach on the next injector run.
+if exist "%TEMP%\claude-office-rtl.outlook-optin"             del /q "%TEMP%\claude-office-rtl.outlook-optin"             >nul 2>&1
+if exist "%TEMP%\claude-office-rtl.disconnect-outlook.request" del /q "%TEMP%\claude-office-rtl.disconnect-outlook.request" >nul 2>&1
 echo   [OK] Tray and injector stopped.
 
 REM ---------------------------------------------------------------

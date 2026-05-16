@@ -39,6 +39,73 @@ const PID_FILE = path.join(TEMP_DIR, 'claude-word-rtl.pid');
 // NOTE: truncate happens AFTER acquireSingletonLock() below, so duplicate
 // launches that exit silently do not clobber the running injector's log.
 const LOG_FILE = path.join(TEMP_DIR, 'claude-word-rtl.log');
+// Per-app opt-in flag files for apps in officeApps.BLOCKED_HOST_INFO_KEYS.
+// Existence of the file = user has explicitly opted this app in for the
+// current injector session. Written by the matching wrapper (e.g. the future
+// outlook-wrapper.bat). Stale-cleared at injector startup so a previous
+// session's consent never carries silently into a new session.
+const OPTIN_FLAGS = {
+  outlook: path.join(TEMP_DIR, 'claude-office-rtl.outlook-optin'),
+};
+
+// IPC request file written by the tray when the user picks "Disconnect
+// Outlook only". Polled at the top of each tick(): if present, every CDP
+// client whose __appName is 'Outlook' is closed, the per-Outlook
+// auto-disconnect timers are cleared, the opt-in flag is revoked, and the
+// request file is deleted. The disconnect handler attached to each client
+// then handles attached-map removal and apps.json refresh on its own.
+//
+// File-based IPC is used (rather than a signal or socket) because the tray
+// runs in PowerShell with no easy way to send a custom signal to the Node
+// injector, and an extra socket would add an attack surface that the rest
+// of the v0.2.x architecture avoids. The injector's existing 2s tick is the
+// right cadence: a Disconnect Outlook only click is not latency-sensitive,
+// it only needs to happen "soon", and bounding it to one tick keeps the
+// shape of the polling loop unchanged. Cleared at startup alongside the
+// opt-in flags so a stale request from a prior session never fires against
+// a fresh attach.
+// See docs/OUTLOOK-EXPANSION-PLAN.md section 4.6.
+const DISCONNECT_REQUEST_FILES = {
+  outlook: path.join(TEMP_DIR, 'claude-office-rtl.disconnect-outlook.request'),
+};
+
+// Auto-disconnect timeout for OptIn (high-exposure) targets. After this many
+// milliseconds of continuous attachment the injector tears the CDP client
+// down on its own and revokes the per-launch opt-in flag so the next tick
+// cannot silently re-attach. The user must click Connect Outlook again to
+// re-establish. Rationale: there is no business case for an 8-hour mail
+// session to keep the CDP debug port open continuously - the longer the
+// port stays open the larger the window in which a local attacker can
+// dump the panel DOM (with mail content while a summarize/draft is alive).
+// See docs/OUTLOOK-EXPANSION-PLAN.md section 4.4. Set in minutes to make
+// the intent and any future tuning obvious in the source.
+const OUTLOOK_AUTO_DISCONNECT_MIN = 15;
+const OUTLOOK_AUTO_DISCONNECT_MS = OUTLOOK_AUTO_DISCONNECT_MIN * 60 * 1000;
+
+// Redact tenant-correlated query parameters from URLs we log for OptIn apps.
+// The CDP target URL for Office add-ins looks like:
+//   https://pivot.claude.ai/?m=outlook-1.0.0.4&_host_Info=Outlook$Win32$16.02$he-IL$$$$16&et=<base64 tenant blob>&...
+// The `et=` parameter (and several adjacent ones the Office host appends)
+// carry base64-encoded mail-tenant metadata: account id, tenant id, expiry,
+// sometimes the principal email address. The injector log lives in %TEMP%
+// under the user's profile, so any local process under the same user can
+// read it. For Outlook specifically, %TEMP% disclosure of tenant metadata
+// alongside mail content in the panel DOM is a wider exposure than for
+// Word/Excel/PowerPoint, which the v0.2.x consent model handles implicitly.
+//
+// Word/Excel/PowerPoint URLs are returned verbatim - changing their log
+// format would be a backward-incompatible diagnostic change, and users
+// upgrading from v0.2.x rely on grepping the raw URL when reporting bugs.
+// See docs/OUTLOOK-EXPANSION-PLAN.md section 4.5.
+function redactUrlForApp(url, appName) {
+  if (!url) return url;
+  if (!appName || String(appName).toLowerCase() !== 'outlook') return url;
+  var q = url.indexOf('?');
+  var base = q >= 0 ? url.substring(0, q) : url;
+  var m = url.match(/[?&]_host_Info=([^&#]+)/i);
+  return base + (m ? '?_host_Info=' + m[1] + '&[redacted]' : '?[redacted]');
+}
+
 function fileLog(msg) {
   try {
     fs.appendFileSync(LOG_FILE, new Date().toISOString() + ' ' + msg + '\n');
@@ -135,6 +202,20 @@ acquireSingletonLock();
 // duplicate launch that exits via acquireSingletonLock() must not clobber
 // the running injector's log file.
 try { fs.writeFileSync(LOG_FILE, ''); } catch (e) { /* best-effort */ }
+// Clear any leftover opt-in flags. A new injector session always starts
+// with all blocked apps blocked; the matching wrapper must re-create the
+// flag on each launch.
+Object.keys(OPTIN_FLAGS).forEach(function (k) {
+  try { fs.unlinkSync(OPTIN_FLAGS[k]); } catch (e) { /* missing is fine */ }
+});
+// Clear any stale Disconnect-only request files from a prior session. If
+// the previous injector exited with a request file lying around, a fresh
+// attach in this session would be torn down on the very first tick - the
+// user would Connect Outlook, see the icon flash green, then watch it go
+// red without explanation.
+Object.keys(DISCONNECT_REQUEST_FILES).forEach(function (k) {
+  try { fs.unlinkSync(DISCONNECT_REQUEST_FILES[k]); } catch (e) { /* missing is fine */ }
+});
 writeStatus('DISCONNECTED');
 writeAppsAllDisconnected();
 process.on('exit', function () {
@@ -288,6 +369,13 @@ const INJECTOR_SCRIPT = `
 `;
 
 const attached = new Map();
+// Active auto-disconnect timers for OptIn targets, keyed by target.id. We
+// keep a handle so the timer can be cleared if the client disconnects
+// naturally (user closed Outlook, target navigated away) before the
+// 15-minute deadline. Without this the timer would fire on a long-gone
+// client and call client.close() on a dead handle - harmless but logs a
+// spurious "Detached" line for a session that has been gone for minutes.
+const optInTimers = new Map();
 
 function log() {
   var ts = new Date().toISOString().slice(11, 19);
@@ -318,7 +406,7 @@ const VALIDATION_SCRIPT = `
   })();
 `;
 
-async function validateInjection(Runtime, url) {
+async function validateInjection(Runtime, url, appName) {
   try {
     var r = await Runtime.evaluate({ expression: VALIDATION_SCRIPT, returnByValue: true });
     var v = r && r.result && r.result.value;
@@ -327,7 +415,7 @@ async function validateInjection(Runtime, url) {
     if (!ok && !domWarningEmitted) {
       domWarningEmitted = true;
       process.stderr.write('[WARN] Claude add-in DOM may have changed; selectors did not match. Check for an updated release of claude-word-rtl.\n');
-      log('Validation failed for ' + url + ': ' + JSON.stringify(v));
+      log('Validation failed for ' + redactUrlForApp(url, appName) + ': ' + JSON.stringify(v));
       writeStatus('ERROR:dom-not-matched-after-inject');
     } else if (ok && inErrorState) {
       // Recovery: we were stuck in ERROR, but this tick validates clean.
@@ -341,14 +429,57 @@ async function validateInjection(Runtime, url) {
 async function attach(target, app, port) {
   if (attached.has(target.id)) return;
   var appName = app ? app.name : 'unknown';
+  var redactedUrl = redactUrlForApp(target.url, appName);
   try {
     var client = await CDP({ target: target.webSocketDebuggerUrl });
     var Page = client.Page, Runtime = client.Runtime;
     await Page.enable();
     await Runtime.enable();
+    // Helper for the race-guard checks below. Returns true iff the user
+    // appears to have aborted this attach while we were awaiting CDP. For
+    // non-OptIn apps (Word/Excel/PowerPoint) both lookups are undefined so
+    // raceLost stays false and attach proceeds normally - same for the
+    // 'unknown' appName fallback.
+    var appKeyLower = appName ? appName.toLowerCase() : '';
+    function attachAborted() {
+      if (DISCONNECT_REQUEST_FILES[appKeyLower]) {
+        try { if (fs.existsSync(DISCONNECT_REQUEST_FILES[appKeyLower])) return true; } catch (e) {}
+      }
+      if (OPTIN_FLAGS[appKeyLower]) {
+        try { if (!fs.existsSync(OPTIN_FLAGS[appKeyLower])) return true; } catch (e) {}
+      }
+      return false;
+    }
+    // Early race guard: before any DOM-mutating call. addScriptToEvaluateOn-
+    // NewDocument is a session-scoped registration that dies with client.close,
+    // but Runtime.evaluate(INJECTOR_SCRIPT) below mutates the live page (style
+    // tag, dir="rtl"). Aborting BEFORE that evaluate keeps the page clean if
+    // the click happened during the Page.enable/Runtime.enable awaits, which
+    // is the most common timing for the race. The late guard at line ~470
+    // remains as a defence-in-depth for clicks arriving during the script
+    // registration and evaluate themselves.
+    if (attachAborted()) {
+      fileLog('Attach aborted pre-evaluate: [' + appName + '] port=' + port +
+              ' url=' + redactedUrl + ' (disconnect requested or opt-in revoked during CDP enable)');
+      try { client.close(); } catch (e) { /* best-effort */ }
+      return;
+    }
     await Page.addScriptToEvaluateOnNewDocument({ source: INJECTOR_SCRIPT });
     var result = await Runtime.evaluate({ expression: INJECTOR_SCRIPT, returnByValue: true });
-    log('Attached & injected: [' + appName + '] port=' + port + ' url=' + target.url + ' -> ' + (result.result && result.result.value));
+    // Late race guard: catches clicks that arrived during the two awaits
+    // above. The DOM is already mutated by Runtime.evaluate at this point;
+    // we accept that asymmetry because every other disconnect path (Disconnect
+    // all, app exit, navigation, auto-disconnect timer) also leaves the
+    // injected style tag behind - we never tear it down explicitly, we just
+    // close the CDP socket. If we ever wire a Runtime.evaluate cleanup into
+    // the regular disconnect handler we should mirror it here.
+    if (attachAborted()) {
+      fileLog('Attach aborted post-handshake: [' + appName + '] port=' + port +
+              ' url=' + redactedUrl + ' (disconnect requested or opt-in revoked while attaching)');
+      try { client.close(); } catch (e) { /* best-effort */ }
+      return;
+    }
+    log('Attached & injected: [' + appName + '] port=' + port + ' url=' + redactedUrl + ' -> ' + (result.result && result.result.value));
     // Track the app name and register the client in the attach map BEFORE
     // refreshing per-app status. refreshAppsStatus() iterates attached.values()
     // to derive the {Word/Excel/PowerPoint -> CONNECTED} map; if the client
@@ -360,27 +491,49 @@ async function attach(target, app, port) {
     writeStatus('CONNECTED');
     refreshAppsStatus();
 
+    // OptIn auto-disconnect (plan 4.4). For Outlook only: after
+    // OUTLOOK_AUTO_DISCONNECT_MS, drop the CDP client and revoke the
+    // per-launch opt-in flag. The disconnect handler below handles the
+    // attach map + status file updates; we just close the client and
+    // delete the flag here so the next discovery tick cannot silently
+    // re-attach to the same Outlook target.
+    if (appName === 'Outlook') {
+      var armedTimer = setTimeout(function () {
+        optInTimers.delete(target.id);
+        fileLog('Outlook auto-disconnect timeout (' + OUTLOOK_AUTO_DISCONNECT_MIN +
+                ' min). Detaching target=' + target.id + ' url=' + redactedUrl);
+        try { fs.unlinkSync(OPTIN_FLAGS.outlook); } catch (e) { /* already gone */ }
+        try { client.close(); } catch (e) { /* best-effort */ }
+      }, OUTLOOK_AUTO_DISCONNECT_MS);
+      optInTimers.set(target.id, armedTimer);
+    }
+
     // Delayed validation: give the page 5s to settle (SPA hydration, async
     // chunks) before we declare the DOM "doesn't match".
-    setTimeout(function () { validateInjection(Runtime, target.url); }, 5000);
+    setTimeout(function () { validateInjection(Runtime, target.url, appName); }, 5000);
 
     Page.on('frameNavigated', async function () {
       try {
         await Runtime.evaluate({ expression: INJECTOR_SCRIPT });
         // Re-run validation after navigation too, but the dedupe flag means
         // it only logs once per process.
-        setTimeout(function () { validateInjection(Runtime, target.url); }, 5000);
+        setTimeout(function () { validateInjection(Runtime, target.url, appName); }, 5000);
       } catch (e) {}
     });
 
     client.on('disconnect', function () {
-      log('Detached: [' + appName + '] port=' + port + ' url=' + target.url);
+      log('Detached: [' + appName + '] port=' + port + ' url=' + redactedUrl);
+      // Clear any armed auto-disconnect timer for this target so it does
+      // not fire later against a dead client (would log a spurious second
+      // "Detached" line and a benign exception swallowed by best-effort).
+      var pending = optInTimers.get(target.id);
+      if (pending) { clearTimeout(pending); optInTimers.delete(target.id); }
       attached.delete(target.id);
       if (attached.size === 0) writeStatus('DISCONNECTED');
       refreshAppsStatus();
     });
   } catch (err) {
-    log('Attach failed for [' + appName + '] port=' + port + ' url=' + target.url + ': ' + err.message);
+    log('Attach failed for [' + appName + '] port=' + port + ' url=' + redactedUrl + ': ' + err.message);
     fileLog('attach error stack: ' + (err && err.stack ? err.stack : '(no stack)'));
   }
 }
@@ -405,12 +558,78 @@ function refreshAppsStatus() {
 var tickCount = 0;
 var lastTargetsSig = null;
 var lastListErrorMsg = null;
+// target.id of blocked targets we have already logged a skip-line for, so
+// the log gets one line per appearance of a blocked target, not one per
+// 2s tick while it stays around. Pruned when the target goes away.
+var loggedBlockedIds = new Set();
+
+function readOptInKeys() {
+  var keys = new Set();
+  Object.keys(OPTIN_FLAGS).forEach(function (k) {
+    try { if (fs.existsSync(OPTIN_FLAGS[k])) keys.add(k); } catch (e) {}
+  });
+  return keys;
+}
+
+// Process any pending Disconnect-only requests from the tray. Iterates the
+// attached map, closes every CDP client whose __appName matches the request
+// (case-insensitive), clears the matching auto-disconnect timer if armed,
+// revokes the per-launch opt-in flag so the very next tick cannot re-attach,
+// and deletes the request file. The CDP 'disconnect' event handler set up
+// by attach() then takes care of attached-map removal, status writes, and
+// timer-map cleanup as if Outlook had been closed.
+//
+// Idempotent on no matching clients: if the user clicks Disconnect Outlook
+// only with no Outlook target attached, the only side effect is consuming
+// the request file and revoking the (already-absent) opt-in flag. Safe to
+// run on every tick because the request file is consumed in the same tick
+// it is observed.
+function processDisconnectRequests() {
+  Object.keys(DISCONNECT_REQUEST_FILES).forEach(function (appKey) {
+    var requestFile = DISCONNECT_REQUEST_FILES[appKey];
+    var present;
+    try { present = fs.existsSync(requestFile); } catch (e) { present = false; }
+    if (!present) return;
+    var matchedAppName = null;
+    for (var app of officeApps.APPS) {
+      if (app.name.toLowerCase() === appKey) { matchedAppName = app.name; break; }
+    }
+    if (!matchedAppName) {
+      // Unknown app key in the request file (should never happen unless a
+      // future tray version writes a key the injector does not understand
+      // yet). Consume the file so it does not loop forever.
+      try { fs.unlinkSync(requestFile); } catch (e) {}
+      return;
+    }
+    var closedAny = false;
+    for (var entry of attached) {
+      var targetId = entry[0];
+      var client = entry[1];
+      if (client && client.__appName === matchedAppName) {
+        var pending = optInTimers.get(targetId);
+        if (pending) { clearTimeout(pending); optInTimers.delete(targetId); }
+        try { client.close(); } catch (e) { /* best-effort */ }
+        closedAny = true;
+      }
+    }
+    try { fs.unlinkSync(OPTIN_FLAGS[appKey]); } catch (e) { /* already gone */ }
+    try { fs.unlinkSync(requestFile); } catch (e) {}
+    fileLog('Disconnect-only request honoured for [' + matchedAppName +
+            ']: closedAny=' + closedAny);
+  });
+}
 // v0.2.0: removed port-9222-squat detection - dynamic ports avoid the squat
 // pathology entirely. Each Office app gets its own ephemeral port via
 // --remote-debugging-port=0, so a non-Office CDP app on a fixed port no
 // longer interferes with discovery.
 async function tick() {
   tickCount++;
+  // Honour any pending Disconnect-only request BEFORE attach reconciliation,
+  // so we do not waste a tick attaching to a target the user just asked us
+  // to drop. The request handler clears the matching opt-in flag, so the
+  // attach loop below (which reads opt-in flags fresh each tick) will not
+  // re-admit the just-dropped target on this same tick either.
+  processDisconnectRequests();
   var results;
   try {
     results = await portDiscovery.discoverActiveTargets();
@@ -433,8 +652,20 @@ async function tick() {
   for (var id of Array.from(attached.keys())) {
     if (!aliveIds.has(id)) {
       attached.delete(id);
+      // Clear OptIn auto-disconnect timer for reaped targets too. The
+      // CDP 'disconnect' event usually fires before we get here, but
+      // abrupt app exits (force-kill, crash) can skip it; without this
+      // cleanup the 15-min timer would still hold a stale reference and
+      // log a spurious detach against a long-gone client.
+      var pendingT = optInTimers.get(id);
+      if (pendingT) { clearTimeout(pendingT); optInTimers.delete(id); }
       droppedAny = true;
     }
+  }
+  // Prune the blocked-log set the same way - if a blocked target closed,
+  // a future re-appearance should re-log.
+  for (var bid of Array.from(loggedBlockedIds)) {
+    if (!aliveIds.has(bid)) loggedBlockedIds.delete(bid);
   }
   // If any target was reaped here (disconnect handler may not have fired
   // for app-exit cases where CDP closes abruptly), refresh the per-app
@@ -442,16 +673,27 @@ async function tick() {
   if (droppedAny) refreshAppsStatus();
   var sig = 'matched=' + results.length +
     ' entries=[' + results.map(function (r) {
-      return (r.app ? r.app.name : 'unknown') + '@' + r.port + ' ' + r.target.url;
+      var entryAppName = r.app ? r.app.name : 'unknown';
+      return entryAppName + '@' + r.port + ' ' + redactUrlForApp(r.target.url, entryAppName);
     }).join(' | ') + ']';
   if (sig !== lastTargetsSig) {
     fileLog('targets (tick ' + tickCount + '): ' + sig);
     lastTargetsSig = sig;
   }
 
+  var optInKeys = readOptInKeys();
   for (var i = 0; i < results.length; i++) {
     var r = results[i];
     if (attached.has(r.target.id)) continue;
+    if (officeApps.isHostInfoBlocked(r.target.url, optInKeys)) {
+      if (!loggedBlockedIds.has(r.target.id)) {
+        loggedBlockedIds.add(r.target.id);
+        var blockedKey = officeApps.getHostInfoKey(r.target.url);
+        fileLog('Blocked target (no opt-in): ' + blockedKey +
+                '@' + r.port + ' url=' + redactUrlForApp(r.target.url, blockedKey));
+      }
+      continue;
+    }
     await attach(r.target, r.app, r.port);
   }
 }

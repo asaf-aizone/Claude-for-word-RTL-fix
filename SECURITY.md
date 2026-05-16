@@ -18,15 +18,15 @@ Only the `main` branch is supported. Older tags are not patched.
 
 ## Security model - short version
 
-While an Office app (Word, Excel, or PowerPoint) is running through
-this tool, that app's WebView2 host exposes a Chrome DevTools debug
-port on a dynamic localhost port number (one port per Office WebView2
-host process; v0.2.0 uses `--remote-debugging-port=0`, was a fixed
-`9222` in v0.1.x). The port is:
+While an Office app (Word, Excel, PowerPoint, or Outlook) is running
+through this tool, that app's WebView2 host exposes a Chrome DevTools
+debug port on a dynamic localhost port number (one port per Office
+WebView2 host process; v0.2.0 uses `--remote-debugging-port=0`, was
+a fixed `9222` in v0.1.x). The port is:
 
 - **Local-only** - not reachable over the network.
 - **Live only while the Office app is running** - closes when you close
-  Word, Excel, or PowerPoint.
+  Word, Excel, PowerPoint, or Outlook.
 - **Unauthenticated** - any other process running under your user
   account can connect to it and read the Claude panel's DOM, observe
   its network traffic, or inject JavaScript into it.
@@ -34,12 +34,43 @@ host process; v0.2.0 uses `--remote-debugging-port=0`, was a fixed
 This is inherent to enabling WebView2 debugging; it is the same exposure
 as running any Chromium-based application with `--remote-debugging-port`.
 The flag is set in the wrapper's process scope only and is inherited
-just by the launched Office app, not by Teams, Outlook, Edge, or any
-other WebView2 host on the account.
+just by the launched Office app, not by Teams, the standalone Outlook
+reading pane outside of this tool's wrapper, Edge, or any other
+WebView2 host on the account.
+
+### Outlook is opt-in with a stricter model (v0.3.0+)
+
+Outlook is treated separately because mail content enters the Claude
+panel DOM during "Summarize this email" / "Draft a reply", and the
+exposure is qualitatively more sensitive than for Word/Excel/PowerPoint
+document panels. To address that, v0.3.0 adds:
+
+- The injector permanently blocks Outlook unless a per-launch opt-in
+  flag (written only by `outlook-wrapper.bat` after the user clicks
+  Connect Outlook and OKs a warning dialog whose default-focused
+  button is Cancel) is present. The flag is cleared at every injector
+  startup so no consent carries silently across sessions.
+- No auto-launch: the tray will not bring the injector up just because
+  Outlook is running. Word/Excel/PowerPoint do trigger auto-launch;
+  Outlook does not.
+- 15-minute auto-disconnect timer per Outlook attachment, after which
+  the injector revokes the opt-in flag on its own.
+- A dedicated **Disconnect Outlook only** tray item to drop just the
+  Outlook attachment without affecting any other connected app.
+- Tenant-correlated URL parameters are redacted from the diagnostic
+  log for Outlook only.
+
+New Outlook (`olk.exe`) is intentionally out of scope; the wrapper
+and the Connect Outlook flow both refuse to run if it is detected.
+
+Full design rationale and the M0 finding that drove the opt-in model:
+[docs/security.md - Outlook-specific risks and mitigations](docs/security.md#outlook-specific-risks-and-mitigations).
 
 Recommendations:
 
 - Close the Office app when you are not actively using the Claude panel.
+- For Outlook: prefer **Disconnect Outlook only** between mail sessions
+  instead of relying on the 15-minute timer.
 - Do not install untrusted browser extensions or other untrusted
   software on the same user account.
 - On corporate-managed machines with EDR/DLP agents, check with your
@@ -55,11 +86,13 @@ what the tool does and does not touch), see [docs/security.md](docs/security.md)
 - Does not modify Office file associations.
 - Does not create scheduled tasks or services.
 - Does not modify `Normal.dotm`, any Word template, any Excel
-  workbook template, or any PowerPoint template.
+  workbook template, any PowerPoint template, or any Outlook
+  signature/account/rule.
 - `install.bat` creates one per-user Startup-folder shortcut
   (`Claude for Word RTL Tray.lnk` - filename retained for v0.1.x
-  upgrade compatibility, even though v0.2.0 covers Word, Excel, and
-  PowerPoint) that launches the tray icon at login, and one per-user
+  upgrade compatibility, even though v0.3.0 covers Word, Excel,
+  PowerPoint, and Outlook) that launches the tray icon at login,
+  and one per-user
   `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\ClaudeWordRTL`
   registry key so the tool appears in Windows Settings > Apps. The
   `DisplayName` in that key is still "Claude for Word RTL Fix" for the
