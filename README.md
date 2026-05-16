@@ -390,7 +390,7 @@ Anthropic כמו תמיד - ה-wrapper פשוט מוסיף flag ל-WebView2 ומ
     <tr>
       <td><code>%TEMP%</code></td>
       <td>כתיבה של PID, סטטוס מצרפי (<code>claude-word-rtl.status</code>) וסטטוס לפי אפליקציה (<code>claude-office-rtl.apps.json</code>) של ה-injector</td>
-      <td>למעקב אחר מצב ההזרקה מה-tray, להציג שלוש שורות סטטוס בתפריט, ולמנוע mass-kill של תהליכי Node</td>
+      <td>למעקב אחר מצב ההזרקה מה-tray, להציג ארבע שורות סטטוס בתפריט, ולמנוע mass-kill של תהליכי Node</td>
     </tr>
     <tr>
       <td>Startup folder של המשתמש</td>
