@@ -1,6 +1,6 @@
 # Claude for Office RTL Fix - תוכנית הרחבה ל-Outlook
 
-**סטטוס:** M0-M3 בוצעו, M4+ פתוחים. עדכון אחרון: 2026-05-16.
+**סטטוס:** M0-M4 בוצעו, M5 (release smoke + GitHub release) פתוח. עדכון אחרון: 2026-05-16.
 **גרסת יעד:** v0.3.0
 **מסמך מקור:** [OFFICE-EXPANSION-PLAN.md](OFFICE-EXPANSION-PLAN.md) (v0.2.0, הרחבה דומה אך לא זהה)
 **תאריך:** 2026-05-12
@@ -164,7 +164,7 @@
 | **M1** | הקשחות 4.1 (manualOnly, no auto-launch) + 4.3 (target filter קשיח ל-`_host_Info=Outlook$`) חייבות לקדום לקוד המינימלי - ראה סעיף 3 "עדכון מ-M0". אחריהן: `lib/office-apps.js` + `outlook-wrapper.bat` + פריט Connect Outlook ב-tray | filter ב-`inject.js` חוסם attach ל-Outlook אלא אם opt-in מפורש; manualOnly מונע auto-spawn של ה-injector על Outlook; Connect Outlook מציג את האייקון כירוק, CSS מוזרק, RTL נראה ב-panel. **בוצע 2026-05-13/14 בארבעה sub-commits: M1a `b324bd7` (opt-in gate ב-inject.js: BLOCKED_HOST_INFO_KEYS + OPTIN_FLAGS), M1b `f4f5c9c` (רישום Outlook ב-office-apps APPS + tray $Apps), M1c `847182d` (outlook-wrapper.bat), M1d `fe23b31` (Connect Outlook tray menu + דיאלוג אזהרה per-launch - מכסה גם את 4.2 מתוך M2)** |
 | **M2** | יתר ההקשחות: 4.2 (דיאלוג אזהרה), 4.4 (auto-disconnect timer), 4.5 (URL redaction בלוג) | reviewer חיצוני (עוד claude code session או user) מאמת כל אחת מהשלוש. **בוצע 2026-05-14: 4.2 בוצע כחלק מ-M1d `fe23b31`; 4.4 ו-4.5 בוצעו ב-`0cefc72` (URL redaction בלוג + 15-minute auto-disconnect timer ב-inject.js)** |
 | **M3** | Disconnect Outlook only (4.6), עדכון `doctor.bat`, עדכון `docs/security.md` | doctor.bat מציג 19 בדיקות (15 קיימות + 4 ל-Outlook), security.md כולל את הסעיף החדש. **בוצע 2026-05-16: `a992284` (Disconnect Outlook only IPC ב-inject.js + tray, doctor 19 בדיקות, סעיף Outlook ב-security.md) + `ecb71f4` (early race guard ב-attach() אחרי post-fix review שגילה שה-late guard מנקה רק CDP אחרי DOM mutation)** |
-| **M4** | תיעוד משתמש: עדכון README ו-README.he עם סקציית Outlook, CHANGELOG ל-v0.3.0, גירסה ב-package.json | קריאה של README ע"י מישהו שלא הכיר את הפרויקט מסבירה את הסיכון בצורה שאפשר להחליט |
+| **M4** | תיעוד משתמש: עדכון README ו-README.he עם סקציית Outlook, CHANGELOG ל-v0.3.0, גירסה ב-package.json | קריאה של README ע"י מישהו שלא הכיר את הפרויקט מסבירה את הסיכון בצורה שאפשר להחליט. **בוצע 2026-05-16 ב-`b5b21df`: package.json 0.2.2->0.3.0, CHANGELOG [0.3.0] עם כל commits M0-M3 + הפניות לקוד, README.md (חלק עברי + אנגלי) עם סקציה ייעודית "Outlook (opt-in)", שלוש שורות חדשות בטבלת תפריט ה-tray, שורה חדשה בטבלת access, callout באבטחה, ו-doctor 15->19. README.he.md עם עדכונים מקבילים בקטגוריות תמציתיות.** |
 | **M5** | release - smoke test על VM נקי (לפי `## Common commands` ב-CLAUDE.md, סעיף "Smoke test"), עדכון GitHub release | tag v0.3.0, release notes, install על מכונה שאינה של אסף |
 
 ---
