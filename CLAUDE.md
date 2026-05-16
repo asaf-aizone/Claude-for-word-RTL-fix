@@ -4,7 +4,7 @@ This file is read automatically by Claude Code when a session starts inside this
 
 ## What this project is
 
-Client-side RTL fix for Claude's Microsoft Office add-in (Word, Excel, PowerPoint). A small Node.js injector (`scripts/inject.js`) attaches to each Office app's WebView2 host via Chrome DevTools Protocol on a dynamic localhost port and injects CSS + a MutationObserver that fixes Hebrew right-to-left rendering in Claude's task pane. Apache 2.0. Local only, no telemetry.
+Client-side RTL fix for Claude's Microsoft Office add-in (Word, Excel, PowerPoint, and Outlook). A small Node.js injector (`scripts/inject.js`) attaches to each Office app's WebView2 host via Chrome DevTools Protocol on a dynamic localhost port and injects CSS + a MutationObserver that fixes Hebrew right-to-left rendering in Claude's task pane. Apache 2.0. Local only, no telemetry. Outlook support is opt-in (v0.3.0+) and gated on a per-launch consent flag - see "Outlook is opt-in" below before touching anything Outlook-related.
 
 **Not an official Anthropic or Microsoft add-in.**
 
@@ -12,16 +12,17 @@ Client-side RTL fix for Claude's Microsoft Office add-in (Word, Excel, PowerPoin
 
 Top-level files (install folder root):
 
-- `install.bat` - per-user installer. Checks Node, installs npm deps, creates Startup-folder shortcut, writes `HKCU\...\Uninstall\ClaudeWordRTL`, silently removes any legacy Auto-enable env var written by v0.1.0 - v0.1.3, stops any old tray/injector via PID files, then launches the new tray. As of v0.1.4 the installer no longer prompts the user for anything. The Apps and Features `DisplayName` is still "Claude for Word RTL Fix" and the Startup-folder shortcut is still `Claude for Word RTL Tray.lnk` for v0.1.x upgrade compatibility, even though v0.2.0 covers all three Office apps.
-- `uninstall.bat` - 4-step uninstaller: stop tray and injector, remove Startup entry + Apps and Features key, clear any legacy Auto-enable env var (only when its value matches one of our known strings, `=9222` or `=0`; user-modified values are preserved), prune `node_modules` and temp status files.
-- `doctor.bat` - 15-check diagnostic for the v0.2.0 multi-app architecture. Checks Node, npm, deps, per-app Office install detection (Word, Excel, PowerPoint), per-app process-running, dynamic CDP ports (via `node -e` shell-out to `scripts/port-discovery.js`), active Claude target enumeration, injector PID, aggregate status file, per-app status JSON, tray PID, Startup entry, Apps and Features key, the legacy Auto-enable env-var regression check (FAIL if it ever returns), and WebView2 runtime. Writes `doctor.log` next to itself.
+- `install.bat` - per-user installer. Checks Node, installs npm deps, creates Startup-folder shortcut, writes `HKCU\...\Uninstall\ClaudeWordRTL` (DisplayVersion = "0.3.0" as of this release), silently removes any legacy Auto-enable env var written by v0.1.0 - v0.1.3, stops any old tray/injector via PID files, then launches the new tray. As of v0.1.4 the installer no longer prompts the user for anything. The Apps and Features `DisplayName` is still "Claude for Word RTL Fix" and the Startup-folder shortcut is still `Claude for Word RTL Tray.lnk` for v0.1.x upgrade compatibility, even though v0.3.0 covers four Office apps (Word/Excel/PowerPoint/Outlook).
+- `uninstall.bat` - 4-step uninstaller: stop tray and injector, remove Startup entry + Apps and Features key, clear any legacy Auto-enable env var (only when its value matches one of our known strings, `=9222` or `=0`; user-modified values are preserved), prune `node_modules` and temp status files. v0.3.0+ also removes the per-app status JSON (`claude-office-rtl.apps.json`), the Outlook opt-in flag (`claude-office-rtl.outlook-optin`), and the Disconnect-only request file (`claude-office-rtl.disconnect-outlook.request`).
+- `doctor.bat` - 19-check diagnostic (was 15 before v0.3.0) for the multi-app architecture. Checks 1-15 are unchanged: Node, npm, deps, per-app Office install detection (Word, Excel, PowerPoint), per-app process-running, dynamic CDP ports (via `node -e` shell-out to `scripts/port-discovery.js`), active Claude target enumeration, injector PID, aggregate status file, per-app status JSON, tray PID, Startup entry, Apps and Features key, the legacy Auto-enable env-var regression check (FAIL if it ever returns), and WebView2 runtime. Checks 16-19 are new and Outlook-specific (all `:info` since Outlook is opt-in): OUTLOOK.EXE installed, Outlook running, Outlook CDP target via dynamic port discovery, Outlook entry in `apps.json`. Writes `doctor.log` next to itself.
 - `check-update.bat` - thin wrapper that runs `node scripts/check-update.js` and prints the result. Used by the tray menu and manually from cmd.
-- `cleanup.bat` - recovery helper. Kills our current injector via PID file, then scans for orphan `node.exe` processes whose command line contains `inject.js` and stops only those. Also kills tray `powershell.exe` processes whose command line mentions `tray-icon.ps1`. v0.2.0 also closes any running WINWORD/EXCEL/POWERPNT.
+- `cleanup.bat` - recovery helper. Kills our current injector via PID file, then scans for orphan `node.exe` processes whose command line contains `inject.js` and stops only those. Also kills tray `powershell.exe` processes whose command line mentions `tray-icon.ps1`. v0.3.0 includes OUTLOOK.EXE in the "is any Office app still running" check so the WebView2-host warning is accurate when Outlook is the only Office app left.
 - `start.bat` - older single-step launcher. Pre-tray-era entry point; mostly superseded by the tray UI. Still works for debugging.
 - `word-wrapper.bat` - transparent Word launcher invoked by Connect Word and by the document-reopen flow. Sets `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS=--remote-debugging-port=0` in its own process scope (port=0 means "WebView2 picks a free dynamic port", was =9222 in v0.1.x), ensures the hidden injector is running (lock file + PID-alive check to avoid duplicates), then launches `WINWORD.EXE` with an optional document argument.
-- `excel-wrapper.bat` - same shape as word-wrapper.bat for `EXCEL.EXE`. Shares `%TEMP%\claude-word-rtl.lock` and `%TEMP%\claude-word-rtl.pid` with the other wrappers; one injector serves all three apps.
+- `excel-wrapper.bat` - same shape as word-wrapper.bat for `EXCEL.EXE`. Shares `%TEMP%\claude-word-rtl.lock` and `%TEMP%\claude-word-rtl.pid` with the other wrappers; one injector serves all four apps.
 - `powerpoint-wrapper.bat` - same shape for `POWERPNT.EXE`. Note: Word and PowerPoint sometimes share a single WebView2 host process, so both apps may register on the same port. The injector handles both shapes via the `_host_Info=` URL parameter.
-- `inject-hidden.vbs` - runs `node scripts/inject.js` and `powershell.exe ... scripts/tray-icon.ps1` with window style 0 (hidden). Called from any of the three wrappers.
+- `outlook-wrapper.bat` (v0.3.0+) - same shape as the other wrappers for `OUTLOOK.EXE` (classic Outlook only; refuses to run if New Outlook `olk.exe` is detected). Also writes the per-launch opt-in flag (`%TEMP%\claude-office-rtl.outlook-optin`) before launching Outlook; the injector treats Outlook as blocked unless that flag exists. The flag is cleared by the injector at startup so consent does not carry across sessions.
+- `inject-hidden.vbs` - runs `node scripts/inject.js` and `powershell.exe ... scripts/tray-icon.ps1` with window style 0 (hidden). Called from any of the four wrappers.
 - `install.log` - generated by `install.bat` at install time. Not shipped.
 - `CHANGELOG.md`, `README.md`, `README.he.md`, `SECURITY.md`, `LICENSE` - standard project docs.
 
@@ -29,7 +30,7 @@ Files under `scripts/`:
 
 - `scripts/inject.js` - the Node injector. Discovers Office WebView2 hosts at runtime via `port-discovery.js` (no fixed port), attaches to each Claude target it finds, and injects `<style>` + MutationObserver via `Runtime.evaluate`. Re-injects every 2s (`POLL_MS`). Writes PID to `%TEMP%\claude-word-rtl.pid`, aggregate one-line status (`CONNECTED` / `DISCONNECTED` / `ERROR:<msg>`) to `%TEMP%\claude-word-rtl.status`, and per-app state to `%TEMP%\claude-office-rtl.apps.json`. Truncates `%TEMP%\claude-word-rtl.log` on each start.
 - `scripts/port-discovery.js` - the v0.2.0 dynamic-port mechanism. Walks `tasklist` for `msedgewebview2.exe` PIDs, maps each PID to its LISTENING port via `netstat`, probes every candidate's `/json/list` for Claude targets, and returns each `{target, app, port}` triple. Per-target app identification reads the `_host_Info=` URL parameter that Office appends to the panel URL.
-- `scripts/tray-icon.ps1` - PowerShell tray icon host. Singleton via named mutex. Polls `claude-word-rtl.status` every 2s for the icon color and `claude-office-rtl.apps.json` for the three per-app status labels at the top of the menu. Implements per-app Connect state machines on Timers (Connect Word / Connect Excel / Connect PowerPoint), Disconnect-all cleanup, Show diagnostic log, Check for updates dialog, Uninstall launcher, Exit. Auto-enable toggle was removed in v0.1.4 (security: persistent env var was an EDR trigger). Staleness detection: if PID is not alive AND status file is older than `$StaleSeconds`, the effective status is forced to `DISCONNECTED` so the icon does not lie when the injector crashed. Icon glyph is "O" (Office) on a status-colored rounded square with a small RTL arrow.
+- `scripts/tray-icon.ps1` - PowerShell tray icon host. Singleton via named mutex. Polls `claude-word-rtl.status` every 2s for the icon color and `claude-office-rtl.apps.json` for the four per-app status labels at the top of the menu (Word/Excel/PowerPoint/Outlook). Implements per-app Connect state machines on Timers (Connect Word / Connect Excel / Connect PowerPoint via a generic loop; Connect Outlook routes through a dedicated `Start-ConnectOutlook` handler with a per-launch warning dialog whose default-focused button is Cancel), Disconnect Outlook only (writes the per-app request file the injector polls), Disconnect-all cleanup (which skips Outlook because it is opt-in - the user may have opened it just to read mail), Show diagnostic log, Check for updates dialog, Uninstall launcher, Exit. Auto-enable toggle was removed in v0.1.4 (security: persistent env var was an EDR trigger). The auto-launch path that brings the injector back up when an Office app is running without one ignores OptIn apps (Outlook) - a bare Outlook session should not trigger CDP attach on its own. Staleness detection: if PID is not alive AND status file is older than `$StaleSeconds`, the effective status is forced to `DISCONNECTED` so the icon does not lie when the injector crashed. Icon glyph is "O" (Office) on a status-colored rounded square with a small RTL arrow.
 - `scripts/check-update.js` - fetches `https://api.github.com/repos/asaf-aizone/Claude-for-Office-RTL-fix/releases/latest` via Node's built-in `https` module. Compares `tag_name` to the local `package.json` version numerically. Zero npm dependencies. 5s timeout.
 - `scripts/create-shortcut.ps1` - called by `install.bat` to create the Startup-folder `.lnk` that points at `start-tray.vbs`.
 - `scripts/start-tray.vbs` - hidden launcher for `tray-icon.ps1`. The Startup-folder shortcut points here.
@@ -38,7 +39,7 @@ Files under `scripts/`:
 
 Files under `lib/`:
 
-- `lib/office-apps.js` - single source of truth for Office app metadata (name, process executable, `_host_Info=` URL key). Used by `scripts/inject.js`, `scripts/port-discovery.js`, and the diagnostic probes. The PowerShell tray maintains its own parallel table (`$Apps` in `tray-icon.ps1`) since it cannot `require` a Node module; the two are kept in sync by hand.
+- `lib/office-apps.js` - single source of truth for Office app metadata (name, process executable, `_host_Info=` URL key) PLUS the `BLOCKED_HOST_INFO_KEYS` set of apps that require a per-launch opt-in flag to attach. Outlook is on the block list as of v0.3.0. Used by `scripts/inject.js`, `scripts/port-discovery.js`, and the diagnostic probes. The PowerShell tray maintains its own parallel table (`$Apps` in `tray-icon.ps1`, with an `OptIn = $true` marker on the Outlook entry) since it cannot `require` a Node module; the two are kept in sync by hand.
 
 Other directories:
 
@@ -122,7 +123,7 @@ Diagnostics:
 doctor.bat
 ```
 
-Runs 15 checks and writes `doctor.log`. Attach this log when reporting an issue. Notable v0.2.0 checks: dynamic CDP ports discovered (#6), active Claude targets per app (#7), per-app injector status from `apps.json` (#10), and the critical legacy-env-var regression check (#14, FAIL if `HKCU\Environment\WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` ever returns).
+Runs 19 checks (was 15 before v0.3.0) and writes `doctor.log`. Attach this log when reporting an issue. Notable v0.2.0 checks: dynamic CDP ports discovered (#6), active Claude targets per app (#7), per-app injector status from `apps.json` (#10), and the critical legacy-env-var regression check (#14, FAIL if `HKCU\Environment\WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` ever returns). v0.3.0 adds Outlook-specific checks (#16 install, #17 process, #18 CDP target, #19 apps.json entry) - all `:info` because Outlook is opt-in.
 
 Check for updates:
 
@@ -146,17 +147,20 @@ Force cleanup (nuclear option for stuck state):
 cleanup.bat
 ```
 
-Kills the injector via PID file, scans for orphan `node.exe` running `inject.js`, kills stray `tray-icon.ps1` PowerShell processes, and (v0.2.0) closes any open WINWORD/EXCEL/POWERPNT.
+Kills the injector via PID file, scans for orphan `node.exe` running `inject.js`, kills stray `tray-icon.ps1` PowerShell processes, and includes WINWORD/EXCEL/POWERPNT/OUTLOOK in the "is any Office app still up" check (Outlook coverage added in v0.3.0).
 
 Smoke test after a code change (manual, since there is no automated suite):
 
 1. `uninstall.bat`, then `del %TEMP%\claude-word-rtl.* %TEMP%\claude-office-rtl.*`.
 2. `install.bat` fresh. Confirm `install.log` has no WARN/FAIL.
-3. `doctor.bat` and confirm `doctor.log` is all `[OK]` and expected `[INFO]`.
+3. `doctor.bat` and confirm `doctor.log` is all `[OK]` and expected `[INFO]`. Step 16-19 are `[INFO]` even when Outlook is not installed.
 4. Open Word with a Hebrew document; right-click tray, Connect Word; confirm RTL is applied.
 5. Repeat for Excel and PowerPoint - all three apps should connect at the same time, each with its own per-app status label going CONNECTED in the tray menu.
-6. Right-click tray, Disconnect all. Confirm icon goes red and all three apps close.
-7. `check-update.bat` reports the current version as latest.
+6. (v0.3.0+) Right-click tray, Connect Outlook. Confirm the warning dialog appears with Cancel as the default-focused button. OK to proceed; Outlook relaunches via `outlook-wrapper.bat`, opt-in flag appears at `%TEMP%\claude-office-rtl.outlook-optin`, Outlook status flips to CONNECTED. Pick Disconnect Outlook only and confirm only Outlook drops (Word/Excel/PowerPoint stay green).
+7. Right-click tray, Disconnect all. Confirm icon goes red, Word/Excel/PowerPoint close, Outlook stays open (Disconnect-all skips OptIn apps). Outlook opt-in flag is gone.
+8. `check-update.bat` reports the current version as latest.
+
+For the full M5 release smoke-test scenarios (Connect during dialog, force-close paths, EDR verification, legacy-user upgrade behaviour, etc.), see section 8 of `docs/OUTLOOK-EXPANSION-PLAN.md`.
 
 Log locations:
 
@@ -169,7 +173,9 @@ Log locations:
 Every file and registry key the tool creates or reads:
 
 - `%TEMP%\claude-word-rtl.status` - aggregate one-line status (`CONNECTED` / `DISCONNECTED` / `ERROR:<msg>`). Written by `scripts/inject.js`, read by `scripts/tray-icon.ps1`. Drives icon color.
-- `%TEMP%\claude-office-rtl.apps.json` - per-app state (v0.2.0+) for the three status labels in the tray menu. Written atomically by `scripts/inject.js` after every attach/disconnect.
+- `%TEMP%\claude-office-rtl.apps.json` - per-app state (v0.2.0+) for the four status labels in the tray menu (Word/Excel/PowerPoint/Outlook). Written atomically by `scripts/inject.js` after every attach/disconnect.
+- `%TEMP%\claude-office-rtl.outlook-optin` (v0.3.0+) - per-launch opt-in flag for Outlook CDP attach. Existence = the user has consented for the current injector session. Written ONLY by `outlook-wrapper.bat` after the user clicks Connect Outlook and OKs the warning dialog. Cleared by `inject.js` at startup, by the 15-min auto-disconnect timer, by Disconnect Outlook only, by Disconnect all, and by uninstall. Never persisted across reboots.
+- `%TEMP%\claude-office-rtl.disconnect-outlook.request` (v0.3.0+) - IPC request file from the tray to the injector for "Disconnect Outlook only". The tray writes a zero-byte file; the injector polls each tick, closes Outlook CDP clients, revokes the opt-in flag, and deletes the request file. Cleared at injector startup so a stale request from a prior session does not fire against a fresh attach.
 - `%TEMP%\claude-word-rtl.pid` - injector process ID, one line. Written on injector start, removed on graceful exit. Used by cleanup, uninstall, the tray's staleness check, and all three wrappers' anti-duplicate logic.
 - `%TEMP%\claude-word-rtl.tray.pid` - tray process ID, one line. Written on tray start, removed on graceful exit or uninstall. Used by `install.bat` to stop the previous tray during reinstall so the new `tray-icon.ps1` code actually loads.
 - `%TEMP%\claude-word-rtl.lock` - written by any of the three wrappers when one of them launches the injector. Prevents double-spawn when the user opens Excel right after Word, etc. Cleaned by `cleanup.bat` or by the wrapper itself on staleness. Filename keeps the `claude-word-rtl` prefix for v0.1.x upgrade compatibility.
@@ -213,7 +219,7 @@ Note: the GitHub repository was renamed in v0.2.1 from `Claude-for-word-RTL-fix`
 If the user says the tray is **red and stays red even after clicking "Connect"** or "nothing happens when I open Word", check `scripts/package.json`:
 
 - If version is `0.1.0`: the user has a known bug. Auto-enable sets the WebView2 debug flag on Word but does NOT start the Node injector, so the tray has nothing to attach to. Tell the user to upgrade to v0.1.1 or newer - the fix is that the tray now auto-launches the injector whenever Word is running without one. The v0.1.0 "Check for updates" dialog does not show the install folder; users have to find it manually via **Windows Settings > Apps > Installed apps > Claude for Word RTL Fix**. Full upgrade steps in the v0.1.1 release notes.
-- If version is `0.1.1` or later (current is `0.2.2`): the auto-launch mechanism is in place. Walk through tray log diagnostics: `%TEMP%\claude-word-rtl.log`, `%TEMP%\claude-word-rtl.status`, `%TEMP%\claude-office-rtl.apps.json`, `%TEMP%\claude-word-rtl.pid`.
+- If version is `0.1.1` or later (current is `0.3.0`): the auto-launch mechanism is in place. Walk through tray log diagnostics: `%TEMP%\claude-word-rtl.log`, `%TEMP%\claude-word-rtl.status`, `%TEMP%\claude-office-rtl.apps.json`, `%TEMP%\claude-word-rtl.pid`. If the report involves Outlook, also check `%TEMP%\claude-office-rtl.outlook-optin` (existence = the user has clicked Connect Outlook this session) and look for the blocked-target line in the log when the flag is absent.
 
 ## What NOT to do
 
@@ -223,6 +229,9 @@ If the user says the tray is **red and stays red even after clicking "Connect"**
 - Do not suggest the user disable Office add-in security, SmartScreen, or Defender. The tool does not require that.
 - Do not help the user force-push to `main` or rewrite history. Contributions come via PRs.
 - Do not suggest porting this tool to macOS or Linux, or recommend running it under WSL, Wine, or a VM as a workaround. The CDP port does not exist on Office for Mac because Office for Mac does not use WebView2. See "Platform - Windows only" above.
+- Do not auto-connect Outlook for the user, write the opt-in flag on their behalf, or remove the warning dialog "to make Connect Outlook smoother". The opt-in model is intentional - mail content enters the panel DOM during Summarize/Draft, and that is qualitatively more sensitive than Word/Excel/PowerPoint document content. The flag, the dialog, and the 15-min auto-disconnect are all gates the user must cross consciously. If a user complains "Connect Outlook is annoying", the answer is "use Disconnect Outlook only when you finish a mail session, not the dialog removal".
+- Do not modify Outlook accounts, signatures, mail rules, or PST/OST files. This tool does not touch any of them.
+- Do not suggest enabling New Outlook (`olk.exe`) support. M0 deferred it; the wrapper and Connect Outlook flow both refuse if `olk.exe` is detected. If a user wants RTL in New Outlook, point them at the deferred status in `docs/OUTLOOK-EXPANSION-PLAN.md` section 7 and the M0 findings in `probe/README.md`.
 
 ## When the user asks "what version is latest?"
 

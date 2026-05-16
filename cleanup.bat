@@ -43,7 +43,7 @@ REM msedgewebview2.exe processes spawned by Word, Excel, or PowerPoint and
 REM report any LISTENING TCP socket they own. The user does not need to
 REM see specific port numbers; the message just says "still exposed" or
 REM "all closed".
-powershell -NoProfile -Command "$wv=Get-CimInstance Win32_Process -Filter \"Name='msedgewebview2.exe'\" -ErrorAction SilentlyContinue; if ($wv) { $offices=Get-CimInstance Win32_Process -Filter \"Name='WINWORD.EXE' OR Name='EXCEL.EXE' OR Name='POWERPNT.EXE'\" -ErrorAction SilentlyContinue; if ($offices) { Write-Host '[WARN] One or more Office WebView2 hosts are still running with the debug flag enabled.'; Write-Host '       To fully close the debug ports, close Word, Excel, and PowerPoint.' } else { Write-Host 'No Office app is running. Any WebView2 hosts found belong to other apps and are unaffected by this tool.' } } else { Write-Host 'No WebView2 hosts running. Debug surface is no longer exposed.' }"
+powershell -NoProfile -Command "$wv=Get-CimInstance Win32_Process -Filter \"Name='msedgewebview2.exe'\" -ErrorAction SilentlyContinue; if ($wv) { $offices=Get-CimInstance Win32_Process -Filter \"Name='WINWORD.EXE' OR Name='EXCEL.EXE' OR Name='POWERPNT.EXE' OR Name='OUTLOOK.EXE'\" -ErrorAction SilentlyContinue; if ($offices) { Write-Host '[WARN] One or more Office WebView2 hosts are still running with the debug flag enabled.'; Write-Host '       To fully close the debug ports, close Word, Excel, PowerPoint, and Outlook.' } else { Write-Host 'No Office app is running. Any WebView2 hosts found belong to other apps and are unaffected by this tool.' } } else { Write-Host 'No WebView2 hosts running. Debug surface is no longer exposed.' }"
 
 echo.
 echo Cleanup complete.
