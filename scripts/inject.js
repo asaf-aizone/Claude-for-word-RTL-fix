@@ -435,26 +435,45 @@ async function attach(target, app, port) {
     var Page = client.Page, Runtime = client.Runtime;
     await Page.enable();
     await Runtime.enable();
+    // Helper for the race-guard checks below. Returns true iff the user
+    // appears to have aborted this attach while we were awaiting CDP. For
+    // non-OptIn apps (Word/Excel/PowerPoint) both lookups are undefined so
+    // raceLost stays false and attach proceeds normally - same for the
+    // 'unknown' appName fallback.
+    var appKeyLower = appName ? appName.toLowerCase() : '';
+    function attachAborted() {
+      if (DISCONNECT_REQUEST_FILES[appKeyLower]) {
+        try { if (fs.existsSync(DISCONNECT_REQUEST_FILES[appKeyLower])) return true; } catch (e) {}
+      }
+      if (OPTIN_FLAGS[appKeyLower]) {
+        try { if (!fs.existsSync(OPTIN_FLAGS[appKeyLower])) return true; } catch (e) {}
+      }
+      return false;
+    }
+    // Early race guard: before any DOM-mutating call. addScriptToEvaluateOn-
+    // NewDocument is a session-scoped registration that dies with client.close,
+    // but Runtime.evaluate(INJECTOR_SCRIPT) below mutates the live page (style
+    // tag, dir="rtl"). Aborting BEFORE that evaluate keeps the page clean if
+    // the click happened during the Page.enable/Runtime.enable awaits, which
+    // is the most common timing for the race. The late guard at line ~470
+    // remains as a defence-in-depth for clicks arriving during the script
+    // registration and evaluate themselves.
+    if (attachAborted()) {
+      fileLog('Attach aborted pre-evaluate: [' + appName + '] port=' + port +
+              ' url=' + redactedUrl + ' (disconnect requested or opt-in revoked during CDP enable)');
+      try { client.close(); } catch (e) { /* best-effort */ }
+      return;
+    }
     await Page.addScriptToEvaluateOnNewDocument({ source: INJECTOR_SCRIPT });
     var result = await Runtime.evaluate({ expression: INJECTOR_SCRIPT, returnByValue: true });
-    // Race guard: while we were awaiting the CDP handshake above, another
-    // tick may have run (await yields the event loop) and the user may have
-    // clicked Disconnect Outlook only. If the per-app disconnect request file
-    // exists at this point, OR the opt-in flag has been revoked while we
-    // were attaching, abort: tear down the half-built client without ever
-    // registering it. Without this guard the disconnect request handler
-    // observed an empty attached map and consumed the request, leaving this
-    // about-to-be-registered client orphaned with no opt-in flag and no way
-    // to be torn down again until the 15-minute auto-disconnect fires.
-    var appKeyLower = appName ? appName.toLowerCase() : '';
-    var raceLost = false;
-    if (DISCONNECT_REQUEST_FILES[appKeyLower]) {
-      try { if (fs.existsSync(DISCONNECT_REQUEST_FILES[appKeyLower])) raceLost = true; } catch (e) {}
-    }
-    if (!raceLost && OPTIN_FLAGS[appKeyLower]) {
-      try { if (!fs.existsSync(OPTIN_FLAGS[appKeyLower])) raceLost = true; } catch (e) {}
-    }
-    if (raceLost) {
+    // Late race guard: catches clicks that arrived during the two awaits
+    // above. The DOM is already mutated by Runtime.evaluate at this point;
+    // we accept that asymmetry because every other disconnect path (Disconnect
+    // all, app exit, navigation, auto-disconnect timer) also leaves the
+    // injected style tag behind - we never tear it down explicitly, we just
+    // close the CDP socket. If we ever wire a Runtime.evaluate cleanup into
+    // the regular disconnect handler we should mirror it here.
+    if (attachAborted()) {
       fileLog('Attach aborted post-handshake: [' + appName + '] port=' + port +
               ' url=' + redactedUrl + ' (disconnect requested or opt-in revoked while attaching)');
       try { client.close(); } catch (e) { /* best-effort */ }
