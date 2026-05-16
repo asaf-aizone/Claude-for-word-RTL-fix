@@ -194,6 +194,19 @@
 - נוצר על ידי **Asaf Abramzon** - [LinkedIn](https://www.linkedin.com/in/asaf-abramzon-7a2b61180/) · [GitHub](https://github.com/asaf-aizone).
 - [`chrome-remote-interface`](https://github.com/cyrus-and/chrome-remote-interface) - CDP client.
 
+## פרויקטים קשורים בקהילת RTL-for-AI-tools
+
+מספר מפתחים עצמאיים בנו פתרונות RTL בשכבות שונות של סביבת ה-AI tooling. כל פרויקט מטפל בסביבה שונה:
+
+- **[Adaptive-RTL-Extension](https://github.com/Lidor-Mashiach/Adaptive-RTL-Extension)** מאת לידור משיח - הרחבת דפדפן גנרית עם click-to-select ל-RTL בכל אתר, כולל ממשקי צ'אט של LLMים.
+- **[Claude.ai RTL Support](https://chromewebstore.google.com/detail/claude-ai-rtl-support/lkopcjdmfmffphbomfhecalbojiaeape)** - הרחבת Chrome ייעודית ל-Claude.ai. קלה יותר מהגנרית אם צריך RTL רק על ממשק הווב.
+- **[rtl-for-vs-code-agents](https://github.com/GuyRonnen/rtl-for-vs-code-agents)** מאת גיא רונן - הרחבה ל-VS Code עבור Claude Code, Cursor, Antigravity ו-Gemini Code Assist בשכבת ה-webview.
+- **[Claude Code RTL Support](https://open-vsx.org/extension/yechielby/claude-code-rtl)** מאת יחיאל בר-יהודה - תוסף ייעודי לפאנל Claude Code בתוך VS Code/Cursor/Antigravity. 6,700+ התקנות.
+- **Claude for Office RTL Fix** *(הפרויקט הזה)* - תוסף Claude ל-Word, Excel, PowerPoint ו-Outlook ב-Microsoft Office desktop.
+- **[kivun-terminal-wsl](https://github.com/noambrand/kivun-terminal-wsl)** מאת נועם ברנד - תיקון RTL בשכבת הטרמינל של Claude Code על Windows/Linux.
+
+הסביבות נפרדות זו מזו - בחרו את הפתרון שמתאים למקום שבו אתם נתקלים בבעיית ה-BiDi.
+
 ## רישיון
 
 Apache License 2.0, ראה [LICENSE](LICENSE).

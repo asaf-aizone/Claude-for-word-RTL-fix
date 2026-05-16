@@ -619,6 +619,27 @@ Issues ו-PRs מתקבלים בברכה. לבאגים של תצוגה - selector
   <li><a href="docs/security.md"><code>docs/security.md</code></a> - מודל האיומים המלא.</li>
 </ul>
 
+<h2>פרויקטים קשורים בקהילת RTL-for-AI-tools</h2>
+
+<p>
+מספר מפתחים עצמאיים בנו פתרונות RTL בשכבות שונות של סביבת ה-AI tooling. כל פרויקט
+מטפל בסביבה שונה - אם נתקלתם בבעיה ב-Word, סביר להניח שתפגשו אותה גם במקומות אחרים:
+</p>
+
+<ul>
+  <li><strong><a href="https://github.com/Lidor-Mashiach/Adaptive-RTL-Extension">Adaptive-RTL-Extension</a></strong> מאת לידור משיח - הרחבת דפדפן גנרית עם click-to-select ל-RTL בכל אתר, כולל ממשקי צ'אט של LLMים (Claude.ai, ChatGPT, Gemini וכו').</li>
+  <li><strong><a href="https://chromewebstore.google.com/detail/claude-ai-rtl-support/lkopcjdmfmffphbomfhecalbojiaeape">Claude.ai RTL Support</a></strong> - הרחבת Chrome ייעודית ל-Claude.ai. קלה יותר מהגנרית אם צריך RTL רק על ממשק הווב של Claude.</li>
+  <li><strong><a href="https://github.com/GuyRonnen/rtl-for-vs-code-agents">rtl-for-vs-code-agents</a></strong> מאת גיא רונן - הרחבה ל-VS Code עבור Claude Code, Cursor, Antigravity ו-Gemini Code Assist בשכבת ה-webview.</li>
+  <li><strong><a href="https://open-vsx.org/extension/yechielby/claude-code-rtl">Claude Code RTL Support</a></strong> מאת יחיאל בר-יהודה - תוסף ייעודי לפאנל Claude Code בתוך VS Code/Cursor/Antigravity. 6,700+ התקנות.</li>
+  <li><strong>Claude for Office RTL Fix</strong> <em>(הפרויקט הזה)</em> - תוסף Claude ל-Word, Excel, PowerPoint ו-Outlook ב-Microsoft Office desktop.</li>
+  <li><strong><a href="https://github.com/noambrand/kivun-terminal-wsl">kivun-terminal-wsl</a></strong> מאת נועם ברנד - תיקון RTL בשכבת הטרמינל של Claude Code על Windows/Linux.</li>
+</ul>
+
+<p>
+הסביבות (DOM של דפדפן גנרי, ממשק הווב של Claude.ai, פאנל IDE, Microsoft Office, טרמינל)
+נפרדות זו מזו - בחרו את הפתרון שמתאים למקום שבו אתם נתקלים בבעיית ה-BiDi.
+</p>
+
 <h2>רישיון</h2>
 
 <p>Apache License 2.0, ראו <a href="LICENSE"><code>LICENSE</code></a>.</p>
@@ -1127,6 +1148,29 @@ does not redistribute, modify, or contain proprietary code from either company.
   <li><a href="SECURITY.md"><code>SECURITY.md</code></a> - vulnerability reporting policy.</li>
   <li><a href="docs/security.md"><code>docs/security.md</code></a> - full threat model.</li>
 </ul>
+
+<h2>Related projects in the RTL-for-AI-tools community</h2>
+
+<p>
+Several independent developers have built userland RTL fixes across the AI-tooling
+stack. Each project tackles a disjoint surface - if you hit the BiDi problem in
+Word, you're likely to hit it elsewhere too:
+</p>
+
+<ul>
+  <li><strong><a href="https://github.com/Lidor-Mashiach/Adaptive-RTL-Extension">Adaptive-RTL-Extension</a></strong> by Lidor Mashiach - generic browser extension with click-to-select RTL for any website, including LLM chat UIs (Claude.ai, ChatGPT, Gemini, etc.).</li>
+  <li><strong><a href="https://chromewebstore.google.com/detail/claude-ai-rtl-support/lkopcjdmfmffphbomfhecalbojiaeape">Claude.ai RTL Support</a></strong> - Chrome extension purpose-built for Claude.ai specifically. Lighter than the generic option if you only need RTL on Claude's web UI.</li>
+  <li><strong><a href="https://github.com/GuyRonnen/rtl-for-vs-code-agents">rtl-for-vs-code-agents</a></strong> by Guy Ronnen - VS Code extension covering Claude Code, Cursor, Antigravity, and Gemini Code Assist in the VS Code webview layer.</li>
+  <li><strong><a href="https://open-vsx.org/extension/yechielby/claude-code-rtl">Claude Code RTL Support</a></strong> by Yechiel Bar-Yehuda - VS Code / Cursor / Antigravity extension purpose-built for the official Claude Code IDE plugin. 6,700+ installs.</li>
+  <li><strong>Claude for Office RTL Fix</strong> <em>(this repo)</em> - Claude add-in panel for Word, Excel, PowerPoint, and Outlook on Microsoft Office desktop.</li>
+  <li><strong><a href="https://github.com/noambrand/kivun-terminal-wsl">kivun-terminal-wsl</a></strong> by Noam Brand - terminal-layer fix for Claude Code's TUI output on Windows/Linux.</li>
+</ul>
+
+<p>
+The surfaces (generic browser DOM, Claude.ai web UI, IDE webview, Microsoft Office,
+terminal) are largely disjoint - pick the project that matches where you're hitting
+the BiDi problem.
+</p>
 
 <h2>License</h2>
 <p>Apache License 2.0 - see <a href="LICENSE"><code>LICENSE</code></a>.</p>
