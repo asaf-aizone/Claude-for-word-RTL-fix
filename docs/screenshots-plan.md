@@ -13,7 +13,7 @@
 - **פונט**: להשאיר את הפונט הברירת-מחדל של Claude והמערכת. לא משנים טיפוגרפיה לפני צילום.
 - **מיקום שמירה**: כל הקבצים תחת `docs/images/`.
 
-## רשימת הצילומים (7 קבצים)
+## רשימת הצילומים (6 קבצים)
 
 ### 1. `before.png` - הפאנל לפני (LTR שבור)
 
@@ -32,18 +32,24 @@
 
 ### 3. `tray-menu.png` - תפריט קליק-ימני של ה-tray
 
-- **מה מראה**: פינת המסך הימנית-תחתית (ליד השעון) עם ה-tray פתוח במצב קליק-ימני. רואים את: Connect (relaunch Claude for Word RTL Fix), Disconnect (close Claude for Word RTL Fix), מפריד, Auto-enable at every Word launch (עם checkbox), מפריד, Show diagnostic log, מפריד, Uninstall..., Exit.
-- **חשוב**: אסור שיופיע "Restart injector" - הפריט הזה הוסר.
-- **Setup**: להפעיל את ה-tray, לחיצה ימנית. לוודא שהאייקון נראה טוב ברזולוציה. אידיאלי לצלם במצב אדום וגם במצב ירוק - ולבחור את היותר יפה.
+- **מה מראה**: פינת המסך הימנית-תחתית (ליד השעון) עם ה-tray פתוח במצב קליק-ימני. מבנה התפריט (v0.3.0):
+  - 4 שורות סטטוס disabled בראש - אחת לכל אפליקציה (Word / Excel / PowerPoint / Outlook). כל שורה מציגה אחד מהמצבים: not running, running without RTL, running (כשהאפליקציה רצה תחת ה-launcher), connected.
+  - מפריד.
+  - Connect Word
+  - Connect Excel
+  - Connect PowerPoint
+  - Connect Outlook
+  - מפריד.
+  - Disconnect Outlook (disabled כש-Outlook לא מחובר; היחיד שניתן לנתק נקודתית).
+  - Disconnect all
+  - מפריד.
+  - Show diagnostic log
+  - Check for updates...
+  - Uninstall...
+  - Exit
+- **Setup**: להפעיל את ה-tray, לחיצה ימנית. אידיאלי לצלם במצב מעורב - חלק מהאפליקציות מחוברות וחלק לא - כדי שכל מצבי הסטטוס יראו באותו צילום (לפחות running ו-connected). אם אפשר, לצלם פעם נוספת כשהכל מנותק (כל הסטטוסים not running) לתיעוד.
 - **רוחב**: 360px.
 - **הערה**: לקרופ רק את האזור של הפינה + התפריט. לא כל המסך. אם יש בשורה התחתונה של Windows אייקונים אחרים - להטשטש או לחתוך.
-
-### 3b. `auto-enable-dialog.png` - דיאלוג OK/Cancel של Auto-enable (חדש)
-
-- **מה מראה**: הדיאלוג שקופץ כשמסמנים את ה-Auto-enable checkbox בפעם הראשונה. הטקסט מסביר שהמשתנה <code>WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS</code> נכתב ל-HKCU\Environment ושהוא ישפיע על אפליקציות WebView2 אחרות (Teams, Outlook, Edge WebView). שני כפתורים - OK / Cancel.
-- **Setup**: לפתוח את התפריט, לסמן Auto-enable, לצלם את הדיאלוג שקופץ.
-- **רוחב**: 360px.
-- **הערה**: זהו פיצ'ר רגיש מבחינת disclosure - חשוב שהצילום יציג בבירור את הטקסט המלא של האזהרה.
 
 ### 4. `connect-dialog.png` - דיאלוג האישור של Connect
 
@@ -72,14 +78,15 @@
 - **גודל**: 720px רוחב. מתחת ל-5MB (GitHub מציג אבל אוהב קטן).
 - **תסריט שנייה-אחר-שנייה**:
   - **0.0s** - Word פתוח עם מסמך עברי. פאנל Claude מימין מציג תשובה בעברית עם LTR שבור (bullets בצד שמאל).
-  - **1.5s** - זום איטי לפינה הימנית-תחתונה. רואים את ה-tray icon אדום ליד השעון.
-  - **2.5s** - Cursor עובר לאייקון, קליק ימני. התפריט נפתח עם Connect, Disconnect, Restart, Exit.
-  - **3.5s** - Cursor על Connect, לחיצה. התפריט נעלם.
-  - **4.0s** - דיאלוג קופץ: "Word ייסגר וייפתח מחדש עם RTL". Cursor לוחץ אישור.
-  - **5.0s** - Word נסגר, Loading קצר.
-  - **5.8s** - Word נפתח מחדש, אותו מסמך, פאנל Claude RTL תקין (bullets בצד ימין).
-  - **6.5s** - האייקון בפינה ירוק.
-  - **7.0s** - פריים אחרון, סטטי שנייה וחצי לפני לולאה.
+  - **1.2s** - זום איטי לפינה הימנית-תחתונה. רואים את ה-tray icon ליד השעון.
+  - **2.0s** - Cursor עובר לאייקון, קליק ימני. התפריט נפתח. רואים את שורות הסטטוס בראש (Word: running without RTL) ואת פריטי ה-Connect הנפרדים לארבע האפליקציות.
+  - **2.8s** - Cursor על Connect Word, לחיצה. התפריט נעלם.
+  - **3.2s** - דיאלוג קופץ: "Word ייסגר וייפתח מחדש עם RTL". Cursor לוחץ אישור.
+  - **4.0s** - Word נסגר, Loading קצר.
+  - **4.8s** - Word נפתח מחדש, אותו מסמך, פאנל Claude RTL תקין (bullets בצד ימין). שורת הסטטוס בתפריט (אם נפתח שוב) הייתה משתנה ל-connected.
+  - **5.5s** - חזרה לתפריט, Cursor על Connect Outlook ולחיצה. דיאלוג האזהרה של Outlook קופץ (Outlook ייסגר וייפתח מחדש). Cursor לוחץ אישור והדיאלוג נסגר.
+  - **6.8s** - חזרה לתפריט, Cursor על Disconnect all. התפריט נעלם, האפליקציות חוזרות למצב רגיל.
+  - **7.5s** - פריים אחרון, סטטי חצי שנייה לפני לולאה.
 - **כלים מומלצים**:
   - ScreenToGif (חינם, Windows). GIF או מסלול mp4 > GIF.
   - ShareX (חינם) - יכול לצלם ולדחוס.
@@ -96,9 +103,7 @@
 |---|------|-------|-------|
 | 1 | `before.png` | ✓ הושלם (2026-04-21, מקור: 064431) | em-dash מוצג, האייקון אדום בעת הצילום |
 | 2 | `after.png` | ✓ הושלם (2026-04-21, מקור: 093603) | אותו פרומפט, em-dash הוסר, scrollbar עבר לשמאל, badge Beta עבר לימין - השוואה חד-משמעית |
-| 3 | `tray-menu.png` | ✓ הושלם (2026-04-21, מקור: 070132) | מבנה התפריט החדש מאומת |
-| 3b | `auto-enable-dialog.png` | ✓ הושלם (2026-04-21, מקור: 071716) | טקסט הדיאלוג ברור ומדויק - כיוון ON |
-| 3c | `auto-disable-dialog.png` | ✓ הושלם (2026-04-21, מקור: 094138) | דיאלוג הסימטרי - כיוון OFF, מסביר מה קורה בכיבוי |
+| 3 | `tray-menu.png` | ✓ הושלם (2026-05-16, מקור: 175153) | רענון ל-v0.3.0 - 4 סטטוסים, 4 Connect per-app כולל Outlook, Disconnect Outlook only. מצב מעורב: Word/Outlook "running without RTL", Excel/PowerPoint "not running". commit c6ae377 |
 | 4 | `connect-dialog.png` | ✓ הושלם (2026-04-21, מקור: 094612) | כולל WARNING על מסמכים לא שמורים |
 | 5 | `rtl-panel.png` | ממתין | Word+פאנל מלאים |
 | 6 | `installer-done.png` | ✓ הושלם (2026-04-21, מקור: 102306, עבר post-processing) | נתיב אישי רודקט, נחתך בסיום ה-banner "Installation complete". מציג 4 שלבים מלאים |
