@@ -10,7 +10,7 @@
 
 **גרסה מלאה (דו-לשונית, עם צילומי מסך ותמונות): [README.md](README.md)** · **יומן שינויים: [CHANGELOG.md](CHANGELOG.md)**
 
-תיקון CSS וטיפוגרפיה בצד הלקוח לתצוגה העברית בתוסף Claude ל-Microsoft Word, Excel, PowerPoint ו-Outlook. החל מ-v0.2.0 הכלי תומך ב-Word/Excel/PowerPoint בו-זמנית. **v0.3.0 הוסיף את Outlook הקלאסי** מאחורי מודל opt-in מוקשח (אישור מפורש לכל הפעלה, ניתוק אוטומטי אחרי 15 דקות, redaction של ה-URL בלוג). שם המאגר ב-GitHub עודכן ב-v0.2.1 ל-`Claude-for-Office-RTL-fix` (היה `Claude-for-word-RTL-fix`). GitHub מחזיק redirect קבוע מהשם הישן, אז clones ו-bookmarks מגרסאות קודמות ממשיכים לעבוד.
+תיקון CSS וטיפוגרפיה בצד הלקוח לתצוגה העברית בתוסף Claude ל-Microsoft Word, Excel, PowerPoint ו-Outlook. החל מ-v0.2.0 הכלי תומך ב-Word/Excel/PowerPoint בו-זמנית. **v0.3.0 הוסיף את Outlook הקלאסי** מאחורי מודל opt-in מוקשח (אישור מפורש לכל הפעלה, ניתוק אוטומטי אחרי 15 דקות, redaction של ה-URL בלוג). שם המאגר ב-GitHub עודכן ב-v0.2.1 ל-`Claude-for-Office-RTL-fix` (היה `Claude-for-word-RTL-fix`). GitHub מחזיק redirect קבוע מהשם הישן, אז <span dir="ltr">clones</span> וסימניות מגרסאות קודמות ממשיכים לעבוד.
 
 תוסף Claude הרשמי ל-Office מציג כיום טקסט עברי משמאל לימין, עם סימני רשימה ופיסוק בצד הלא נכון. הכלי הזה מתחבר לחלונית WebView2 של התוסף בכל אחת מארבע האפליקציות באמצעות Chrome DevTools Protocol הסטנדרטי, ומזריק גיליון סגנונות וכן MutationObserver קטן כדי לתקן את התצוגה.
 
@@ -19,8 +19,6 @@
 הכל פועל מקומית במחשב שלך. שום דבר לא נשלח ברשת.
 
 > **Windows בלבד.** הכלי לא עובד על macOS או Linux. תוסף Claude ל-Office מבוסס על WebView2 של מיקרוסופט, שקיים רק ב-Windows. ל-Office ל-Mac יש runtime אחר (WKWebView) שלא חושף את אותו debugging interface, וכל שכבת ההפעלה (bat, vbs, PowerShell, Registry, Startup folder) לא רלוונטית שם. אם אתם על Mac, אין port מ-Office.
-
-> **אזהרה למחשבים מנוהלי-ארגון.** הכלי מתחבר ל-Microsoft Word דרך Chrome DevTools Protocol ומזריק JavaScript לתוך WebView2, ומפעיל את עצמו דרך VBS hidden launcher ו-PowerShell. הצירוף הזה דומה מבחינה מבנית לטכניקות שגונבי-מידע משתמשים בהן, ולכן מערכות EDR ארגוניות (Microsoft Defender for Endpoint, CrowdStrike Falcon, SentinelOne, Sophos) עלולות לזהות את ההתקנה כפעילות חשודה ולנתק את המכונה מהרשת (host isolation) באופן אוטומטי. **אין להתקין על מחשב מנוהל-ארגון בלי אישור מקדים מצוות אבטחת המידע** ובלי הוספת ה-hash וה-path של הקבצים ל-allowlist. המחבר אינו אחראי לתגובות מערכות אבטחה ארגוניות.
 
 > **אזהרה למחשבים מנוהלי-ארגון.** הכלי מתחבר ל-Microsoft Word דרך Chrome DevTools Protocol ומזריק JavaScript לתוך WebView2, ומפעיל את עצמו דרך VBS hidden launcher ו-PowerShell. הצירוף הזה דומה מבחינה מבנית לטכניקות שגונבי-מידע משתמשים בהן, ולכן מערכות EDR ארגוניות (Microsoft Defender for Endpoint, CrowdStrike Falcon, SentinelOne, Sophos) עלולות לזהות את ההתקנה כפעילות חשודה ולנתק את המכונה מהרשת (host isolation) באופן אוטומטי. **אין להתקין על מחשב מנוהל-ארגון בלי אישור מקדים מצוות אבטחת המידע** ובלי הוספת ה-hash וה-path של הקבצים ל-allowlist. המחבר אינו אחראי לתגובות מערכות אבטחה ארגוניות.
 
@@ -171,8 +169,8 @@
 
 - האפליקציה (Word/Excel/PowerPoint) חייבת להיות מופעלת דרך פעולת **Connect** של המגש (שמפעילה את ה-wrapper המתאים) או דרך ה-wrapper ישירות. פתיחה ישירה מהאייקון של האפליקציה לא מפעילה את פורט הדיבאג, אך המגש מזהה את המצב הזה ומציע להפעיל את האפליקציה מחדש דרך ה-wrapper עם הקבצים שהיו פתוחים.
 - לא חל על טקסט ש-Claude כותב ישירות לגוף המסמך/חוברת העבודה/המצגת (זהו מסלול קוד נפרד מחוץ לחלונית ה-WebView2). הגדירו את גופן ברירת המחדל והסגנונות של האפליקציה לצורך זה.
-- SmartScreen עלול להתריע בהפעלה ראשונה משום שהסקריפטים לא חתומים דיגיטלית.
-- Device Guard / WDAC במחשבים מנוהלים עלול לחסום מתקינים וסקריפטים לא חתומים.
+- בהפעלה ראשונה, `SmartScreen` עלול להתריע משום שהסקריפטים לא חתומים דיגיטלית.
+- במחשבים מנוהלים, `Device Guard` / `WDAC` עלולים לחסום מתקינים וסקריפטים לא חתומים.
 - **הכלי מסתמך על הזרקת CSS ו-JS ל-DOM של תוסף Claude, שעדיין בבטא.** עדכונים של Anthropic לתוסף עלולים לשנות את מבנה ה-DOM, שמות ה-classes או תבנית ה-URL ולשבור את הכלי ללא התראה. אם הכלי מפסיק לעבוד לאחר עדכון של Office, פתחו issue, מהדורה מתוקנת בדרך כלל היא שינוי של שורה אחת בבוררים.
 
 ## האם Anthropic יחסמו אותי?
@@ -198,11 +196,10 @@
 
 מפתחים עצמאיים בנו פתרונות RTL בשכבות שונות של סביבת ה-AI tooling. כל פרויקט מטפל בסביבה שונה:
 
-- **[rtl-for-vs-code-agents](https://github.com/GuyRonnen/rtl-for-vs-code-agents)** מאת גיא רונן - הרחבה ל-VS Code עבור Claude Code, Cursor, Antigravity ו-Gemini Code Assist בשכבת ה-webview.
-- **Claude for Office RTL Fix** *(הפרויקט הזה)* - תוסף Claude ל-Word, Excel, PowerPoint ו-Outlook ב-Microsoft Office desktop.
-- **[kivun-terminal-wsl](https://github.com/noambrand/kivun-terminal-wsl)** מאת נועם ברנד - תיקון RTL בשכבת הטרמינל של Claude Code על Windows/Linux.
+- **[rtl-for-vs-code-agents](https://github.com/GuyRonnen/rtl-for-vs-code-agents)** מאת גיא רונן - הרחבה ל-<span dir="ltr">VS Code</span> עבור <span dir="ltr">Claude Code, Cursor, Antigravity, and Gemini Code Assist</span> בשכבת ה-<span dir="ltr">webview</span>.
+- **[kivun-terminal-wsl](https://github.com/noambrand/kivun-terminal-wsl)** מאת נועם ברנד - תיקון <span dir="ltr">RTL</span> בשכבת הטרמינל של <span dir="ltr">Claude Code</span> על <span dir="ltr">Windows/Linux</span>.
 
-שלוש הסביבות (פאנל IDE, Microsoft Office, טרמינל) נפרדות זו מזו - בחרו את הפתרון שמתאים למקום שבו אתם נתקלים בבעיית ה-BiDi.
+שני הפרויקטים האלה משלימים את הכלי הנוכחי. בחרו את הפתרון שמתאים למקום שבו אתם נתקלים בבעיית ה-BiDi.
 
 ## רישיון
 
